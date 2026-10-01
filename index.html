@@ -1,0 +1,251 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>radlee Lab Notes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#F2F4F6; --surface:#FFFFFF; --ink:#17212B; --muted:#5A6774; --line:#D6DCE2;
+  --accent:#A8520C; --accent-soft:#F6E7D8;
+  --term-bg:#18222C; --term-ink:#DCE4EC; --term-prompt:#F0A04B; --term-dim:#8796A5;
+  --tip:#1E6B52; --tip-soft:#DDEFE7; --warn:#9A3B1B; --warn-soft:#F7E1D8;
+  --done:#1E6B52; --active:#A8520C; --todo:#8A96A2;
+  --display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#10161D; --surface:#17202A; --ink:#E4E9EE; --muted:#97A4B1; --line:#2A3643;
+    --accent:#F0A04B; --accent-soft:#3A2A1A;
+    --term-bg:#0A0F14; --term-ink:#DCE4EC; --term-prompt:#F0A04B; --term-dim:#7D8C9B;
+    --tip:#6CC7A3; --tip-soft:#15302A; --warn:#F09A7A; --warn-soft:#3A221B;
+    --done:#6CC7A3; --active:#F0A04B; --todo:#6B7886;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#10161D; --surface:#17202A; --ink:#E4E9EE; --muted:#97A4B1; --line:#2A3643;
+  --accent:#F0A04B; --accent-soft:#3A2A1A;
+  --term-bg:#0A0F14; --term-ink:#DCE4EC; --term-prompt:#F0A04B; --term-dim:#7D8C9B;
+  --tip:#6CC7A3; --tip-soft:#15302A; --warn:#F09A7A; --warn-soft:#3A221B;
+  --done:#6CC7A3; --active:#F0A04B; --todo:#6B7886;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.65;padding-inline:16px;padding-block:0 64px}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+code{font-family:var(--mono);font-size:.86em;background:var(--accent-soft);padding:.08em .35em;border-radius:3px}
+
+.masthead{max-width:1120px;margin:0 auto;padding-block:40px 28px;border-bottom:1px solid var(--line);display:grid;gap:10px}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.masthead h1{font-family:var(--display);font-weight:700;font-size:clamp(34px,6vw,54px);line-height:1.02;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.masthead h1 span{color:var(--accent)}
+.masthead p{margin:0;max-width:62ch;color:var(--muted)}
+.scope{font-family:var(--mono);font-size:12.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 18px}
+.scope b{color:var(--ink);font-weight:600}
+
+.layout{max-width:1120px;margin:0 auto;display:grid;grid-template-columns:260px minmax(0,1fr);gap:48px;padding-top:32px}
+@media (max-width:860px){.layout{grid-template-columns:minmax(0,1fr);gap:28px}}
+
+aside{align-self:start;position:sticky;top:calc(env(safe-area-inset-top,0px) + 20px);display:grid;gap:28px}
+@media (max-width:860px){aside{position:static}}
+.side-h{font-family:var(--display);font-weight:600;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.toc{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.toc a{display:grid;grid-template-columns:40px 1fr;gap:8px;padding:7px 8px;border-radius:4px;text-decoration:none;color:var(--ink);font-family:var(--display);font-size:15px;line-height:1.3}
+.toc a:hover{background:var(--surface)}
+.toc .n{font-family:var(--mono);font-size:12px;color:var(--accent);padding-top:2px;font-variant-numeric:tabular-nums}
+.modules{list-style:none;margin:0;padding:0;display:grid;gap:8px;font-family:var(--display);font-size:15px}
+.modules li{display:flex;align-items:center;gap:10px}
+.dot{width:10px;height:10px;border-radius:50%;flex:none;border:2px solid var(--todo)}
+.dot.done{background:var(--done);border-color:var(--done)}
+.dot.active{background:var(--accent-soft);border-color:var(--active)}
+.modules .st{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+
+main{display:grid;gap:56px;min-width:0}
+article{display:grid;gap:18px;min-width:0}
+.meta{font-family:var(--mono);font-size:12.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center}
+.meta .entry{color:var(--accent);font-weight:600}
+article h2{font-family:var(--display);font-weight:700;font-size:clamp(26px,4vw,36px);line-height:1.1;margin:0;text-wrap:balance}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{font-family:var(--mono);font-size:11.5px;padding:2px 8px;border:1px solid var(--line);border-radius:3px;color:var(--muted)}
+.tldr{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);padding:14px 18px;max-width:68ch}
+.tldr b{font-family:var(--display);font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:2px}
+.sec{display:grid;gap:12px;max-width:68ch}
+.sec h3{font-family:var(--display);font-weight:600;font-size:21px;margin:10px 0 0}
+.sec p{margin:0}
+.sec ul,.sec ol{margin:0;padding-left:1.3em;display:grid;gap:4px}
+.term{background:var(--term-bg);color:var(--term-ink);border-radius:6px;overflow:hidden;max-width:100%}
+.term-bar{display:flex;align-items:center;justify-content:space-between;padding:6px 10px 6px 14px;font-family:var(--mono);font-size:11.5px;color:var(--term-dim);border-bottom:1px solid rgba(255,255,255,.07)}
+.term-bar button{font:inherit;color:var(--term-ink);background:transparent;border:1px solid rgba(255,255,255,.18);border-radius:3px;padding:2px 8px;cursor:pointer}
+.term-bar button:hover{border-color:var(--term-prompt);color:var(--term-prompt)}
+.term pre{margin:0;padding:12px 14px;overflow-x:auto;font-family:var(--mono);font-size:13.5px;line-height:1.55}
+.term .p{color:var(--term-prompt);user-select:none}
+.term .c{color:var(--term-dim)}
+.note{padding:12px 16px;border-radius:4px;font-size:16px}
+.note b{font-family:var(--display);letter-spacing:.06em;text-transform:uppercase;font-size:13px;margin-right:6px}
+.note.tip{background:var(--tip-soft)} .note.tip b{color:var(--tip)}
+.note.warn{background:var(--warn-soft)} .note.warn b{color:var(--warn)}
+.tbl{overflow-x:auto;max-width:100%}
+table{border-collapse:collapse;font-size:15px;min-width:100%}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--display);font-weight:600;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+td{font-variant-numeric:tabular-nums}
+.rule{border:0;border-top:1px dashed var(--line);margin:0}
+.state{color:var(--muted);font-family:var(--mono);font-size:14px;padding:24px 0}
+@media (prefers-reduced-motion:no-preference){article{animation:rise .4s ease-out both}}
+@keyframes rise{from{transform:translateY(6px)}to{transform:none}}
+</style>
+
+<header class="masthead">
+  <div class="eyebrow" id="course-source">Course log · ethical hacking &amp; network security</div>
+  <h1>radlee <span>Lab Notes</span></h1>
+  <p id="course-blurb">Notes from working through an ethical hacking, penetration testing and network security course. Each entry covers what I did, the commands I used, what broke and how I fixed it.</p>
+  <div class="scope"><span>Lab: <b>Kali Linux on VirtualBox</b></span><span>Host: <b>Windows 11</b></span><span>Rule: <b>only test what you own or are authorised to test</b></span></div>
+</header>
+
+<div class="layout">
+  <aside>
+    <nav aria-label="Entries">
+      <h2 class="side-h">Entries</h2>
+      <ol class="toc" id="toc"></ol>
+    </nav>
+    <section aria-label="Course progress">
+      <h2 class="side-h">Course progress</h2>
+      <ul class="modules" id="modules"></ul>
+    </section>
+  </aside>
+  <main id="posts"><div class="state">Loading entries…</div></main>
+</div>
+
+<script>
+(function(){
+  const $ = (s) => document.querySelector(s);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const pad = (n) => String(n).padStart(2, "0");
+
+  function inline(e, text){
+    String(text || "").split(/(`[^`]+`|\*\*[^*]+\*\*)/).forEach(part => {
+      if (/^`.+`$/.test(part)) e.appendChild(el("code", null, part.slice(1, -1)));
+      else if (/^\*\*.+\*\*$/.test(part)) e.appendChild(el("strong", null, part.slice(2, -2)));
+      else if (part) e.appendChild(document.createTextNode(part));
+    });
+    return e;
+  }
+  const rich = (tag, text, cls) => inline(el(tag, cls), text);
+
+  function copyBtn(getText){
+    const b = el("button", null, "Copy"); b.type = "button";
+    b.addEventListener("click", () => {
+      const done = (msg) => { b.textContent = msg; setTimeout(() => b.textContent = "Copy", 1400); };
+      try { navigator.clipboard.writeText(getText()).then(() => done("Copied"), () => done("Select & copy")); }
+      catch (e) { done("Select & copy"); }
+    });
+    return b;
+  }
+
+  function block(b){
+    switch (b.t) {
+      case "p": return rich("p", b.text);
+      case "list": case "steps": {
+        const l = el(b.t === "steps" ? "ol" : "ul");
+        (b.items || []).forEach(i => l.appendChild(rich("li", i)));
+        return l;
+      }
+      case "note": {
+        const n = el("div", "note " + (b.kind === "warn" ? "warn" : "tip"));
+        n.appendChild(el("b", null, b.kind === "warn" ? "Watch out" : "Tip"));
+        return inline(n, b.text);
+      }
+      case "code": {
+        const w = el("div", "term");
+        const bar = el("div", "term-bar");
+        bar.appendChild(el("span", null, b.label || "terminal"));
+        const lines = String(b.text || "").split("\n");
+        const cmds = lines.filter(l => /^(\$|PS>) /.test(l)).map(l => l.replace(/^(\$|PS>) /, ""));
+        bar.appendChild(copyBtn(() => (cmds.length ? cmds : lines).join("\n")));
+        w.appendChild(bar);
+        const pre = el("pre");
+        lines.forEach((l, i) => {
+          const m = l.match(/^(\$|PS>) (.*)$/);
+          if (m) { pre.appendChild(el("span", "p", m[1] + " ")); pre.appendChild(document.createTextNode(m[2])); }
+          else if (l.startsWith("#")) pre.appendChild(el("span", "c", l));
+          else pre.appendChild(document.createTextNode(l));
+          if (i < lines.length - 1) pre.appendChild(document.createTextNode("\n"));
+        });
+        w.appendChild(pre);
+        return w;
+      }
+      case "table": {
+        const wrap = el("div", "tbl"); const t = el("table");
+        const hr = el("tr"); (b.head || []).forEach(h => hr.appendChild(el("th", null, h)));
+        const th = el("thead"); th.appendChild(hr); t.appendChild(th);
+        const tb = el("tbody");
+        (b.rows || []).forEach(r => { const tr = el("tr"); r.forEach(c => tr.appendChild(rich("td", c))); tb.appendChild(tr); });
+        t.appendChild(tb); wrap.appendChild(t); return wrap;
+      }
+      default: return rich("p", b.text || "");
+    }
+  }
+
+  function renderPosts(docs){
+    const main = $("#posts"), toc = $("#toc");
+    main.replaceChildren(); toc.replaceChildren();
+    if (!docs.length) { main.appendChild(el("div", "state", "No entries yet.")); return; }
+    docs.forEach((d, idx) => {
+      const p = d.data(); const n = p.n ?? idx + 1; const id = "entry-" + n;
+      const li = el("li"); const a = el("a"); a.href = "#" + id;
+      a.appendChild(el("span", "n", "#" + pad(n))); a.appendChild(el("span", null, p.title || "Untitled"));
+      li.appendChild(a); toc.appendChild(li);
+
+      const art = el("article"); art.id = id;
+      const meta = el("div", "meta");
+      meta.appendChild(el("span", "entry", "Entry " + pad(n)));
+      if (p.module) meta.appendChild(el("span", null, "Module: " + p.module));
+      if (p.date) meta.appendChild(el("span", null, p.date));
+      art.appendChild(meta);
+      art.appendChild(el("h2", null, p.title || "Untitled"));
+      if (Array.isArray(p.tags) && p.tags.length) {
+        const tg = el("div", "tags"); p.tags.forEach(t => tg.appendChild(el("span", "tag", t))); art.appendChild(tg);
+      }
+      if (p.summary) { const s = el("div", "tldr"); s.appendChild(el("b", null, "Summary")); s.appendChild(rich("span", p.summary)); art.appendChild(s); }
+      (p.sections || []).forEach(sec => {
+        const s = el("section", "sec");
+        if (sec.h) s.appendChild(el("h3", null, sec.h));
+        (sec.blocks || []).forEach(b => s.appendChild(block(b)));
+        art.appendChild(s);
+      });
+      main.appendChild(art);
+      if (idx < docs.length - 1) main.appendChild(el("hr", "rule"));
+    });
+    if (location.hash) { const t = document.getElementById(location.hash.slice(1)); if (t) t.scrollIntoView(); }
+  }
+
+  function renderCourse(snap){
+    if (!snap.exists) return;
+    const c = snap.data();
+    if (c.source) $("#course-source").textContent = "Course log · " + c.source;
+    if (c.blurb) $("#course-blurb").textContent = c.blurb;
+    const ul = $("#modules"); ul.replaceChildren();
+    (c.modules || []).forEach(m => {
+      const li = el("li");
+      li.appendChild(el("span", "dot " + (m.status || "todo")));
+      li.appendChild(el("span", null, m.name));
+      li.appendChild(el("span", "st", m.status === "done" ? "done" : m.status === "active" ? "now" : "next"));
+      ul.appendChild(li);
+    });
+  }
+
+  const unavailable = () => { $("#posts").replaceChildren(el("div", "state", "Entries can't load in this view. Open the page on claude.ai while signed in.")); };
+
+  (async () => {
+    const db = window.claude && window.claude.use ? await window.claude.use("db") : null;
+    if (!db) { unavailable(); return; }
+    db.collection("posts").orderBy("n", "asc").onSnapshot(s => renderPosts(s.docs), unavailable);
+    db.doc("meta/course").onSnapshot(renderCourse, () => {});
+  })();
+})();
+</script>
+
+</body></html>
