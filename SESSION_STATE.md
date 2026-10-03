@@ -1,9 +1,9 @@
 # Lab Session State & Checkpoint
 
-**Last Updated**: October 3, 2026, 21:35 SAST  
+**Last Updated**: October 3, 2026, 22:15 SAST  
 **Author / Lab User**: `general@lee` (Kali Linux) / `radlee`  
 **GitHub Repository**: [`https://github.com/radlee/lab-notes.git`](https://github.com/radlee/lab-notes.git)  
-**Current Phase**: Termux Mobile Access Established, Target Verification & Kali SSH Setup
+**Current Phase**: Termux Mobile Access Established, Target Verification & Full-Stack Audit
 
 ---
 
@@ -29,8 +29,8 @@ Because the VMs are bridged directly to your home Wi-Fi network, your Android de
 | **Kali Linux** | `192.168.0.149` | `eth0` | **Attack Box** (Online; SSH port 22 closed, pending `systemctl enable --now ssh`) |
 | **Windows 11 Host** | `192.168.0.125` | Wi-Fi Host Adapter | VirtualBox Hypervisor host |
 | **CentOS Stream 9** | Assigned via DHCP | Anaconda Installer | Target VM 2 (Installation Summary active) |
-| **radblok API** | `https://radblok-api.onrender.com` | Public Cloud API | Live Express / MongoDB REST backend (Verified UP) |
-| **radblok Frontend** | `radblok.co.za` | Cloudflare CPT PoP | Pending domain renewal / PaaS reactivation |
+| **radblok API** | `https://radblok-api.onrender.com` | Public Cloud API | **LIVE** Express / MongoDB REST backend (`HTTP 200 OK`) |
+| **radblok Frontend** | `https://radblok.co.za` | Cloudflare CPT PoP | **LIVE & RESTORED** (`HTTP 200 OK`, Render origin) |
 
 ---
 
@@ -70,9 +70,24 @@ python -c 'import pty; pty.spawn("/bin/bash")'
 
 ---
 
-## 3. Cloud Target Reconnaissance (`radblok-api.onrender.com`)
+## 3. Cloud Target Reconnaissance (`radblok-api` & `radblok.co.za`)
 
-The live production backend was mapped and verified from Kali:
+### Target A: `https://radblok.co.za` (Restored Production Frontend)
+- **Status**: **ONLINE & OPERATIONAL** (`HTTP 200 OK`)
+- **Routing**: Apex 301-redirects to `https://www.radblok.co.za/`, terminates on Cloudflare Cape Town edge (`CPT`).
+- **Origin Server**: Render (`rndr-id: 9217194e-8490-4b56`, `x-render-origin-server: Render`).
+- **Session Cookie**: `connect.sid` issued with `HttpOnly`, but **missing `Secure` and `SameSite` flags**.
+- **Discovered Routes**:
+  - `GET /` — Public home page
+  - `GET /about` — Public about page
+  - `GET /post/:id` — Public articles keyed by MongoDB ObjectID (e.g. `6780f110c998d75dd1cea1ac`)
+  - `GET /dashboard` — Returns `302 Found`, redirecting unauthenticated users to `/admin`
+  - `GET /admin` — Administrative login portal (`<form action="/admin" method="post">`)
+  - `GET /register` — Registration portal (`<form action="/register" method="post">`)
+  - `GET /add-post` — Authenticated article authoring form
+- **Defensive Header Deficiencies**: Missing HSTS, Missing CSP, Missing X-Frame-Options (Clickjacking vulnerability), Leaks `X-Powered-By: Express`.
+
+### Target B: `https://radblok-api.onrender.com` (Live Cloud API)
 - **Root Endpoint**: `GET https://radblok-api.onrender.com/api` -> returns `{"message":"Welcome to radblok API"}`
 - **Users Endpoint**: `GET https://radblok-api.onrender.com/api/users` -> returns author objects (`leecpt@gmail.com`, `posts: 3`)
 - **Posts Endpoint**: `GET https://radblok-api.onrender.com/api/posts` -> returns published blog posts (`total: 3`)
@@ -95,7 +110,7 @@ The live production backend was mapped and verified from Kali:
 
 ---
 
-## 5. Lab Journal Index (Entries 006 - 023)
+## 5. Lab Journal Index (Entries 006 - 024)
 
 - **Entry 006–011**: Passive DNS, whois, CNAME chains, GCP us-west1 cluster, Cloudflare edge scans.
 - **Entry 012**: Layer 7 headers (`curl -IL`), Cape Town PoP (`CPT`), 301 canonical redirect, HTTP 503 Render routing states.
@@ -110,12 +125,14 @@ The live production backend was mapped and verified from Kali:
 - **Entry 021**: Backend REST API Reconnaissance: radblok-api.onrender.com mapped to Express, MongoDB, Cloudinary.
 - **Entry 022**: Supply Chain Backdoor: vsftpd 2.3.4 (CVE-2011-2523), smiley trigger `:)`, port 6200 listener, raw sockets vs interactive PTY.
 - **Entry 023**: Layer 2 & 3 Host Verification: ARP resolution, VirtualBox OUI (`08:00:27`), and cross-host routing proof.
+- **Entry 024**: Frontend Reactivation & Full-Stack Surface Analysis: radblok.co.za Live Audit (Route mapping, cookie security, missing defensive headers).
 
 ---
 
 ## 6. Next Steps Checklist
+- [x] Reactivate `radblok.co.za` with registrar (xneelo) and resume Render origin.
 - [ ] **Resume Action**: Start SSH on Kali Linux (`sudo systemctl enable --now ssh` on `192.168.0.149`), then connect via `ssh general@192.168.0.149`.
 - [ ] Complete CentOS Stream 9 Anaconda installation (Storage partition -> Root password -> Create user -> Reboot).
 - [ ] Conduct comprehensive service scan against CentOS Stream 9 once booted.
 - [ ] Test API authenticated routes on `radblok-api.onrender.com` (POST / login / JWT tokens).
-- [ ] Monitor domain status for `radblok.co.za`.
+- [ ] Test admin authentication & CSRF behavior on `https://radblok.co.za/admin`.

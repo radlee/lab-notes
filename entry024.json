@@ -1,0 +1,64 @@
+{
+  "n": 24,
+  "date": "2026-10-03",
+  "module": "Reconnaissance & scanning",
+  "title": "Frontend Reactivation & Full-Stack Surface Analysis: radblok.co.za Live Audit",
+  "tags": ["radblok", "web-security", "recon", "express", "cookies", "headers", "hsts", "csrf", "render", "cloudflare"],
+  "summary": "Following domain reactivation by registrar xneelo and service resumption on Render, conducted live Layer 7 reconnaissance against the restored production frontend at https://radblok.co.za. Mapped application routing structure (/dashboard, /admin, /register, /post/:id), audited session cookie security (connect.sid), and evaluated missing HTTP security headers (HSTS, CSP, X-Frame-Options) across the live edge.",
+  "sections": [
+    {
+      "h": "Service Restoration & Apex Redirection Verification",
+      "blocks": [
+        {"t": "p", "text": "Earlier in Entry 012, `radblok.co.za` returned `HTTP 503 Service Unavailable` with `x-render-routing: suspend-by-user`. Following registrar account unlocking and service unsuspension in Render, live HTTP probes confirmed the frontend is back online with full Cloudflare edge termination at the Cape Town PoP (`CPT`):"},
+        {"t": "code", "label": "curl -IL https://radblok.co.za", "text": "HTTP/1.1 301 Moved Permanently\nDate: Sat, 03 Oct 2026 20:04:57 GMT\nlocation: https://www.radblok.co.za/\nServer: cloudflare\nCF-RAY: a44e8f138a88aa64-CPT\n\nHTTP/1.1 200 OK\nDate: Sat, 03 Oct 2026 20:05:00 GMT\nContent-Type: text/html; charset=utf-8\nrndr-id: 9217194e-8490-4b56\nServer: cloudflare\nSet-Cookie: connect.sid=s%3ArzPam_k4UXjJK7vb_1hrii95-9yBelz2.13XgOnh1h88IeVQDXCrRCMqsagMnSQoN6L4oBkKD1%2BY; Path=/; HttpOnly\nx-powered-by: Express\nx-render-origin-server: Render\nCF-RAY: a44e8f16e9b2dfa9-CPT"},
+        {"t": "p", "text": "The apex domain `radblok.co.za` cleanly issues a 301 redirect to canonical `https://www.radblok.co.za/`, where Render responds in `200 OK`."}
+      ]
+    },
+    {
+      "h": "Application Route Discovery & Authentication Surface",
+      "blocks": [
+        {"t": "p", "text": "Automated HTML parsing of internal navigational links and form actions revealed the public and restricted route tree:" },
+        {"t": "table", "head": ["Route / Endpoint", "HTTP Method", "Access Level", "Observed Behavior & Technical Purpose"], "rows": [
+          ["`/`", "GET", "Public", "Homepage delivering published articles, branding, and author overview."],
+          ["`/about`", "GET", "Public", "Informational site and author background page."],
+          ["`/post/:id`", "GET", "Public", "Dynamic post viewer querying MongoDB by 24-character ObjectID (e.g., `/post/6780f110c998d75dd1cea1ac`)."],
+          ["`/dashboard`", "GET", "Restricted", "Protected member area. Returns `HTTP 302 Found` redirecting unauthenticated requests directly to `/admin`."],
+          ["`/admin`", "GET, POST", "Restricted", "Authentication portal hosting `<form action=\"/admin\" method=\"post\">` with username and password inputs."],
+          ["`/register`", "GET, POST", "Restricted", "Account registration interface (`<form action=\"/register\" method=\"post\">`)."],
+          ["`/add-post`", "GET, POST", "Restricted", "Content publishing form for authenticated authors."]
+        ]}
+      ]
+    },
+    {
+      "h": "Session Cookie Audit: connect.sid",
+      "blocks": [
+        {"t": "p", "text": "The application issues an Express session cookie upon first interaction: `Set-Cookie: connect.sid=...; Path=/; HttpOnly`."},
+        {"t": "table", "head": ["Cookie Attribute", "State", "Security Assessment"], "rows": [
+          ["`HttpOnly`", "ENABLED", "**Positive**: Prevents client-side scripts from reading `document.cookie`, mitigating credential theft via Cross-Site Scripting (XSS)."],
+          ["`Secure`", "**MISSING**", "**Defect**: The cookie lacks the `Secure` flag. Browsers may transmit this session token over unencrypted HTTP if the user enters `http://` before HTTPS redirection occurs."],
+          ["`SameSite`", "**MISSING**", "**Defect**: Without `SameSite=Lax` or `SameSite=Strict`, the browser attaches `connect.sid` to cross-site requests, exposing authenticated state-changing actions (e.g. creating/deleting posts) to Cross-Site Request Forgery (CSRF)."]
+        ]}
+      ]
+    },
+    {
+      "h": "HTTP Defensive Header Gap Analysis",
+      "blocks": [
+        {"t": "p", "text": "Probing response headers against the OWASP Secure Headers Project identified critical omissions:"},
+        {"t": "table", "head": ["Header", "Status", "Vulnerability / Exploit Potential"], "rows": [
+          ["`Strict-Transport-Security` (HSTS)", "Missing", "Browsers are not forced to connect via HTTPS on future sessions; vulnerable to SSL-stripping MITM."],
+          ["`X-Frame-Options`", "Missing", "Allows embedding within an external `<iframe>`, creating an active **Clickjacking** vector on the `/admin` login form."],
+          ["`Content-Security-Policy` (CSP)", "Missing", "No domain restrictions for scripts or styles; increases severity of potential stored or reflected XSS."],
+          ["`X-Content-Type-Options`", "Missing", "Permits MIME-sniffing, where browsers execute uploaded non-script files as scripts."],
+          ["`X-Powered-By`", "Leaked (`Express`)", "Reveals server framework to automated scanners and fingerprinting engines."]
+        ]}
+      ]
+    },
+    {
+      "h": "Hardening Recommendations (Express & Render)",
+      "blocks": [
+        {"t": "p", "text": "To remediate these findings in production Express code:"},
+        {"t": "code", "label": "server.js / app.js hardening", "text": "const helmet = require('helmet');\n\n// 1. Enforce security headers & hide Express\napp.use(helmet());\napp.disable('x-powered-by');\n\n// 2. Harden session cookie\napp.use(session({\n  secret: process.env.SESSION_SECRET,\n  resave: false,\n  saveUninitialized: false,\n  cookie: {\n    secure: true,       // Enforce HTTPS transmission\n    httpOnly: true,     // Block XSS access\n    sameSite: 'lax',    // Defend against CSRF\n    maxAge: 1000 * 60 * 60 * 24 // 24-hour expiration\n  }\n}));"}
+      ]
+    }
+  ]
+}
