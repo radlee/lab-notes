@@ -1,0 +1,45 @@
+{
+  "n": 14,
+  "date": "2026-10-01",
+  "module": "Reconnaissance & scanning",
+  "title": "Dual independent certs & catch-all platform interception",
+  "tags": ["recon", "ssl-cert", "tls", "acme", "render", "robots.txt", "radblok"],
+  "summary": "Probing the apex domain certificate confirmed Render/Cloudflare maintains two separate, independently provisioned GTS ECDSA certificates rather than a unified multi-SAN certificate. Furthermore, requesting /robots.txt returned Render's HTML suspension page, proving the platform ingress intercepts all URI paths before they reach the web application layer.",
+  "sections": [
+    {
+      "h": "Apex certificate comparison",
+      "blocks": [
+        {"t": "code", "label": "kali", "text": "$ nmap -p 443 --script ssl-cert radblok.co.za\nPORT    STATE SERVICE\n443/tcp open  https\n| ssl-cert: Subject: commonName=radblok.co.za\n| Subject Alternative Name: DNS:radblok.co.za\n| Issuer: commonName=WE1/organizationName=Google Trust Services/countryName=US\n| Public Key type: ec (256 bits, ecdsa-with-SHA256)\n| Not valid before: 2026-09-19T14:01:11\n| Not valid after:  2026-12-18T15:01:09\n|_SHA-256: 5a3b c635 afcb 0794 ..."},
+        {"t": "table", "head": ["Attribute", "Apex (`radblok.co.za`)", "Subdomain (`www.radblok.co.za`)"], "rows": [
+          ["Subject CN", "`radblok.co.za`", "`www.radblok.co.za`"],
+          ["SAN", "`DNS:radblok.co.za`", "`DNS:www.radblok.co.za`"],
+          ["Issued At", "`2026-09-19 14:01:11`", "`2026-09-20 08:33:33` (~18h later)"],
+          ["Expires At", "`2026-12-18`", "`2026-12-19`"],
+          ["SHA-256 Hash", "`5a3b...`", "`3054...`"]
+        ]},
+        {"t": "p", "text": "This confirms automated micro-provisioning: Render/Cloudflare's ACME agent requests isolated, single-host certificates for each domain custom entry. The apex was registered and validated first on September 19, and the `www` record was validated and issued separately on September 20."}
+      ]
+    },
+    {
+      "h": "Path interception: /robots.txt returns suspension HTML",
+      "blocks": [
+        {"t": "code", "label": "kali", "text": "$ curl -s https://www.radblok.co.za/robots.txt\n<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n    <title>Service Suspended</title>\n</head>\n<body>\nThis service has been suspended by its owner.\n</body>\n</html>"},
+        {"t": "p", "text": "Instead of a standard plain text `robots.txt` document, the server returns the HTML `Service Suspended` page."},
+        {"t": "note", "kind": "warn", "text": "**Recon & Fuzzing Implication**: In this state, any web crawler, content discovery tool, or directory fuzzer (such as `ffuf`, `dirsearch`, or `gobuster`) will fail or report false positives. The platform edge proxy intercepts every incoming URI before it touches any application router, returning a uniform HTTP 503 response across all routes."}
+      ]
+    },
+    {
+      "h": "Passive & web recon wrap-up",
+      "blocks": [
+        {"t": "p", "text": "With this scan, the reconnaissance against `radblok.co.za` has reached its ceiling without modifying infrastructure or resuming the container:"},
+        {"t": "list", "items": [
+          "DNS/Whois mapped: xneelo registrar, host-h nameservers, dangling MX record to Render.",
+          "Cloud Infrastructure: Render.com PaaS running on GCP US West 1 (Oregon).",
+          "Edge Network: Cloudflare proxy terminating in Cape Town (CPT PoP).",
+          "Crypto: Dedicated 256-bit ECDSA certificates issued via Google Trust Services (WE1) for each hostname.",
+          "Application State: Service suspended at Render ingress; all Layer 7 paths return uniform HTTP 503 platform catch-all."
+        ]}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "n": 12,
+  "date": "2026-10-01",
+  "module": "Reconnaissance & scanning",
+  "title": "Application-layer recon: Header analysis leaks Render state & Cloudflare PoP",
+  "tags": ["recon", "curl", "headers", "cloudflare", "render", "http-status", "radblok"],
+  "summary": "HTTP header inspection via curl revealed critical infrastructure behaviors: Cloudflare terminates traffic locally at the Cape Town PoP (CPT), apex radblok.co.za redirects to www with a 301, the web service returns HTTP 503 with 'x-render-routing: suspend-by-user' proving the service was manually suspended in Render, and radblok.onrender.com returns HTTP 404 with 'x-render-routing: no-server' disclosing slug de-allocation.",
+  "sections": [
+    {
+      "h": "The curl probe & response",
+      "blocks": [
+        {"t": "code", "label": "kali", "text": "$ curl -IL https://radblok.co.za\nHTTP/2 301 \ndate: Thu, 01 Oct 2026 19:10:08 GMT\ncontent-type: text/html; charset=utf-8\nlocation: https://www.radblok.co.za/\ncf-cache-status: DYNAMIC\nserver: cloudflare\ncf-ray: a43dc3fecfbb039a-CPT\nalt-svc: h3=\":443\"; ma=86400\n\nHTTP/2 503 \ndate: Thu, 01 Oct 2026 19:10:09 GMT\ncontent-type: text/html; charset=utf-8\ncontent-length: 256\nx-render-routing: suspend-by-user\ncf-cache-status: DYNAMIC\nserver: cloudflare\ncf-ray: a43dc408383bbf11-CPT\nalt-svc: h3=\":443\"; ma=86400"},
+        {"t": "code", "label": "kali", "text": "$ curl -IL https://radblok.onrender.com\nHTTP/2 404 \ndate: Thu, 01 Oct 2026 19:10:37 GMT\ncontent-type: text/plain; charset=utf-8\ncontent-length: 10\nx-content-type-options: nosniff\nx-render-routing: no-server\ncf-cache-status: DYNAMIC\nserver: cloudflare\ncf-ray: a43dc4b83a3abf11-CPT\nalt-svc: h3=\":443\"; ma=86400"}
+      ]
+    },
+    {
+      "h": "Key findings from response headers",
+      "blocks": [
+        {"t": "table", "head": ["Header / Signal", "Value", "Recon & Security Meaning"], "rows": [
+          ["`cf-ray`", "`...-CPT`", "**Cape Town Point of Presence (PoP)**. Even though Render's origin VMs reside in GCP US West 1 (Oregon), Cloudflare terminates TLS locally in South Africa (CPT airport code) to optimize edge latency."],
+          ["`x-render-routing`", "`suspend-by-user`", "**Application State Disclosure**. Render custom header confirms the target service exists on Render but has been manually suspended/paused by the account owner."],
+          ["`x-render-routing` (onrender)", "`no-server`", "**Subdomain Mismatch / Slug De-allocation**. `radblok.onrender.com` does not have an active service bound to that exact slug; the service may use a generated hash slug or only bind the custom domain."],
+          ["`location`", "`https://www.radblok.co.za/`", "**Apex-to-WWW Canonicalization**. The apex domain redirects to `www` via HTTP 301."],
+          ["`alt-svc`", "`h3=\":443\"; ma=86400`", "**HTTP/3 (QUIC) Supported**. Cloudflare advertises HTTP/3 availability over UDP port 443."]
+        ]}
+      ]
+    },
+    {
+      "h": "Missing security headers audit",
+      "blocks": [
+        {"t": "p", "text": "Examining the HTTP/2 503 response reveals an absence of standard defensive HTTP security headers:"},
+        {"t": "table", "head": ["Header", "Status", "Risk / Function"], "rows": [
+          ["`Strict-Transport-Security` (HSTS)", "Missing", "Browsers are not instructed to enforce HTTPS-only connections for future visits."],
+          ["`Content-Security-Policy` (CSP)", "Missing", "No policy defining trusted sources for scripts, frames, or styles."],
+          ["`X-Frame-Options`", "Missing", "No explicit protection against clickjacking/framing (unless defined by HTML meta tags)."],
+          ["`X-Content-Type-Options`", "Missing on 503 (present on 404)", "Lacks protection against MIME-sniffing attacks on the main error page."]
+        ]},
+        {"t": "note", "kind": "tip", "text": "When an application is suspended or served via proxy error pages, CDN/PaaS default error responders often omit custom application security headers configured inside the backend app code."}
+      ]
+    },
+    {
+      "h": "Lab status & takeaways",
+      "blocks": [
+        {"t": "list", "items": [
+          "Layer 7 recon successfully extracted operational state without invasive scanning.",
+          "`x-render-routing: suspend-by-user` confirms the backend project status on Render.",
+          "Cloudflare's edge PoP (`CPT` / Cape Town) confirmed geographic edge routing.",
+          "Next step: Inspect TLS certificate details and Subject Alternative Names (SANs) to see what other hostnames are bound to the certificate."
+        ]}
+      ]
+    }
+  ]
+}

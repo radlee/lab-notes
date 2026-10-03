@@ -1,0 +1,36 @@
+{
+  "n": 23,
+  "date": "2026-10-03",
+  "module": "Reconnaissance & scanning",
+  "title": "Layer 2 & Layer 3 Host Verification: ARP Resolution & VirtualBox OUI Analysis",
+  "tags": ["arp", "icmp", "ping", "mac-address", "oui", "virtualbox", "recon", "networking"],
+  "summary": "Following subnet migration to 192.168.0.0/24, conducted definitive Layer 2 and Layer 3 host discovery from Kali Linux targeting Metasploitable 2 (192.168.0.155). Verified bidirectional packet routing via ICMP Echo (0% packet loss) and confirmed Layer 2 hardware adjacency through ARP cache inspection, validating the Oracle VirtualBox hardware prefix (08:00:27).",
+  "sections": [
+    {
+      "h": "Layer 3 ICMP Round-Trip Analysis",
+      "blocks": [
+        {"t": "p", "text": "Tested end-to-end IP reachability across the bridged wireless network:"},
+        {"t": "code", "label": "kali", "text": "┌──(general㉿lee)-[~]\n└─$ ping -c 2 192.168.0.155\nPING 192.168.0.155 (192.168.0.155) 56(84) bytes of data.\n64 bytes from 192.168.0.155: icmp_seq=1 ttl=64 time=185 ms\n64 bytes from 192.168.0.155: icmp_seq=2 ttl=64 time=3.09 ms\n\n--- 192.168.0.155 ping statistics ---\n2 packets transmitted, 2 received, 0% packet loss, time 1014ms\nrtt min/avg/max/mdev = 3.086/93.801/184.517/90.715 ms"},
+        {"t": "p", "text": "The return TTL of **64** is the textbook signature of a Linux kernel hop. The second packet RTT dropped to **3.09 ms**, reflecting immediate local Wi-Fi transmission after initial ARP resolution."}
+      ]
+    },
+    {
+      "h": "Layer 2 Hardware Adjacency (ARP)",
+      "blocks": [
+        {"t": "p", "text": "Inspected the Linux kernel's ARP table to verify the hardware link without relying on higher-layer network stacks:"},
+        {"t": "code", "label": "kali", "text": "┌──(general㉿lee)-[~]\n└─$ arp -n 192.168.0.155\nAddress                  HWtype  HWaddress           Flags Mask            Iface\n192.168.0.155            ether   08:00:27:1d:80:01   C                     eth0"},
+        {"t": "table", "head": ["Field", "Observed Value", "Technical Meaning"], "rows": [
+          ["`HWaddress`", "`08:00:27:1d:80:01`", "**Oracle VirtualBox Virtual NIC**. The initial 3 bytes (`08:00:27`) represent the IEEE Organizationally Unique Identifier (OUI) allocated to VirtualBox."],
+          ["`Flags`", "`C` (Complete)", "The ARP request broadcast was successfully replied to by the target's NIC, and the mapping is cached in memory."],
+          ["`Iface`", "`eth0`", "Direct Layer 2 broadcast domain adjacency (both VMs share the bridged wireless adapter)."]
+        ]}
+      ]
+    },
+    {
+      "h": "Self-Probe vs Cross-Host Probe Contrast",
+      "blocks": [
+        {"t": "p", "text": "Earlier when running `arp -n 192.168.0.155` from inside Metasploitable itself, the kernel reported `no entry` because an operating system never issues an ARP request for its own IP. Testing from Kali immediately populated the complete hardware mapping, proving full cross-host communication."}
+      ]
+    }
+  ]
+}

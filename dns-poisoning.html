@@ -1,0 +1,806 @@
+<title>DNS Cache Poisoning</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+
+<style>
+/* dark-first */
+:root {
+  --bg: #08090d;
+  --surface: #10131c;
+  --surface2: #181d2b;
+  --border: #1e2538;
+  --text: #d4cfc8;
+  --muted: #7a7570;
+  --heading: #ede8e0;
+
+  --attack: #bf3b3b;
+  --attack-soft: rgba(191,59,59,0.12);
+  --attack-border: rgba(191,59,59,0.35);
+
+  --defend: #2a7a5a;
+  --defend-soft: rgba(42,122,90,0.12);
+  --defend-border: rgba(42,122,90,0.35);
+
+  --dns: #4a7aaa;
+  --dns-soft: rgba(74,122,170,0.12);
+  --dns-border: rgba(74,122,170,0.35);
+
+  --victim: #b07a2a;
+  --victim-soft: rgba(176,122,42,0.12);
+  --victim-border: rgba(176,122,42,0.35);
+
+  --serif: "DM Serif Display", Georgia, serif;
+  --sans: "DM Sans", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f5f2ed;
+    --surface: #ffffff;
+    --surface2: #edeae4;
+    --border: #ddd8d0;
+    --text: #1e1b18;
+    --muted: #726d66;
+    --heading: #0d0b09;
+
+    --attack: #9a2020;
+    --attack-soft: rgba(154,32,32,0.07);
+    --attack-border: rgba(154,32,32,0.25);
+
+    --defend: #1a5e40;
+    --defend-soft: rgba(26,94,64,0.07);
+    --defend-border: rgba(26,94,64,0.25);
+
+    --dns: #2a5a8a;
+    --dns-soft: rgba(42,90,138,0.07);
+    --dns-border: rgba(42,90,138,0.25);
+
+    --victim: #7a5010;
+    --victim-soft: rgba(122,80,16,0.07);
+    --victim-border: rgba(122,80,16,0.25);
+
+    color-scheme: light;
+  }
+}
+
+:root[data-theme="light"] {
+  --bg: #f5f2ed;
+  --surface: #ffffff;
+  --surface2: #edeae4;
+  --border: #ddd8d0;
+  --text: #1e1b18;
+  --muted: #726d66;
+  --heading: #0d0b09;
+
+  --attack: #9a2020;
+  --attack-soft: rgba(154,32,32,0.07);
+  --attack-border: rgba(154,32,32,0.25);
+
+  --defend: #1a5e40;
+  --defend-soft: rgba(26,94,64,0.07);
+  --defend-border: rgba(26,94,64,0.25);
+
+  --dns: #2a5a8a;
+  --dns-soft: rgba(42,90,138,0.07);
+  --dns-border: rgba(42,90,138,0.25);
+
+  --victim: #7a5010;
+  --victim-soft: rgba(122,80,16,0.07);
+  --victim-border: rgba(122,80,16,0.25);
+
+  color-scheme: light;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 17px;
+  line-height: 1.7;
+  margin: 0;
+  padding-inline: 16px;
+  padding-block: 0 80px;
+}
+
+.wrap {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+/* ── cover ── */
+.cover {
+  padding-block: 56px 48px;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 16px;
+}
+
+.cover-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--attack);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cover-label::before {
+  content: "";
+  display: inline-block;
+  width: 8px; height: 8px;
+  background: var(--attack);
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,100% { opacity:1; }
+  50% { opacity:.3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cover-label::before { animation: none; }
+}
+
+.cover h1 {
+  font-family: var(--serif);
+  font-size: clamp(32px, 6vw, 52px);
+  line-height: 1.08;
+  margin: 0;
+  color: var(--heading);
+  text-wrap: balance;
+}
+
+.cover h1 em {
+  font-style: italic;
+  color: var(--attack);
+}
+
+.cover-sub {
+  color: var(--muted);
+  font-size: 15px;
+  max-width: 56ch;
+}
+
+.meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 24px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  padding-top: 8px;
+}
+
+.meta-row span b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ── sections ── */
+section {
+  padding-block: 40px;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 20px;
+}
+
+.section-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+section h2 {
+  font-family: var(--serif);
+  font-size: clamp(22px, 4vw, 30px);
+  line-height: 1.15;
+  margin: 0;
+  color: var(--heading);
+  text-wrap: balance;
+}
+
+section p {
+  margin: 0;
+  max-width: 62ch;
+}
+
+section p + p {
+  margin-top: 12px;
+}
+
+/* ── dns flow diagram ── */
+.flow {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 24px 20px;
+  display: grid;
+  gap: 0;
+  overflow-x: auto;
+}
+
+.flow-row {
+  display: grid;
+  grid-template-columns: 130px 1fr 130px;
+  align-items: center;
+  gap: 8px;
+  min-width: 480px;
+}
+
+.node {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 12px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.node b {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--heading);
+}
+
+.node.dns-node { border-color: var(--dns-border); background: var(--dns-soft); }
+.node.attack-node { border-color: var(--attack-border); background: var(--attack-soft); }
+.node.real-node { border-color: var(--defend-border); background: var(--defend-soft); }
+
+.arrow-col {
+  display: grid;
+  gap: 4px;
+}
+
+.arrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.arrow .line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+  position: relative;
+}
+
+.arrow.real .line { background: var(--defend); opacity: .5; }
+.arrow.fake .line { background: var(--attack); opacity: .6; }
+.arrow.serve .line { background: var(--victim); opacity: .5; }
+
+.arrow .arrowhead {
+  font-size: 14px;
+}
+
+.arrow.real { color: var(--defend); }
+.arrow.fake { color: var(--attack); }
+.arrow.serve { color: var(--victim); }
+
+/* ── steps ── */
+.steps {
+  display: grid;
+  gap: 0;
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 0 16px;
+  padding-block: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.step:first-child { border-top: none; }
+
+.step-num {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  padding-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.step-body {
+  display: grid;
+  gap: 6px;
+}
+
+.step-title {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--heading);
+  line-height: 1.3;
+}
+
+.step-desc {
+  font-size: 15px;
+  color: var(--text);
+  max-width: 58ch;
+}
+
+.step.attack { border-left: 3px solid var(--attack); padding-left: 14px; margin-left: -17px; }
+.step.dns    { border-left: 3px solid var(--dns);    padding-left: 14px; margin-left: -17px; }
+.step.victim { border-left: 3px solid var(--victim); padding-left: 14px; margin-left: -17px; }
+
+/* ── callout ── */
+.callout {
+  padding: 16px 20px;
+  border-radius: 4px;
+  font-size: 15px;
+  max-width: 62ch;
+}
+
+.callout b {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.callout.warn { background: var(--victim-soft); border: 1px solid var(--victim-border); }
+.callout.warn b { color: var(--victim); }
+.callout.defend { background: var(--defend-soft); border: 1px solid var(--defend-border); }
+.callout.defend b { color: var(--defend); }
+.callout.attack { background: var(--attack-soft); border: 1px solid var(--attack-border); }
+.callout.attack b { color: var(--attack); }
+
+/* ── impact table ── */
+.impact {
+  display: grid;
+  gap: 10px;
+}
+
+.impact-row {
+  display: grid;
+  grid-template-columns: 140px 1fr auto;
+  gap: 12px;
+  align-items: start;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+@media (max-width: 520px) {
+  .impact-row { grid-template-columns: 1fr; }
+}
+
+.impact-target {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--heading);
+}
+
+.impact-desc { color: var(--text); }
+
+.badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 3px;
+  white-space: nowrap;
+  align-self: start;
+}
+
+.badge.no  { background: var(--attack-soft);  color: var(--attack);  border: 1px solid var(--attack-border); }
+.badge.partial { background: var(--victim-soft); color: var(--victim); border: 1px solid var(--victim-border); }
+
+/* ── chain of trust ── */
+.chain {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-width: 420px;
+}
+
+.chain-node {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.chain-dot {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--defend);
+  flex: none;
+}
+
+.chain-label {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--heading);
+}
+
+.chain-label span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.chain-line {
+  width: 2px;
+  height: 28px;
+  background: var(--defend);
+  opacity: .4;
+  margin-left: 5px;
+}
+
+/* ── action items ── */
+.actions {
+  display: grid;
+  gap: 10px;
+}
+
+.action {
+  display: flex;
+  gap: 14px;
+  align-items: start;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.action-icon {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--defend-soft);
+  color: var(--defend);
+  border: 1px solid var(--defend-border);
+  border-radius: 3px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+.action-text {
+  font-size: 15px;
+}
+
+.action-text strong { color: var(--heading); }
+
+/* ── code ── */
+.codeblock {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.code-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+  letter-spacing: .06em;
+}
+
+.codeblock pre {
+  margin: 0;
+  padding: 14px;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-x: auto;
+  color: var(--text);
+}
+
+.codeblock .c { color: var(--muted); }
+.codeblock .ok { color: var(--defend); }
+.codeblock .bad { color: var(--attack); }
+
+code {
+  font-family: var(--mono);
+  font-size: .875em;
+  background: var(--surface2);
+  padding: .08em .35em;
+  border-radius: 3px;
+  color: var(--text);
+}
+
+/* ── links ── */
+.cover-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.pill-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--defend);
+  background: var(--defend-soft);
+  border: 1px solid var(--defend-border);
+  border-radius: 4px;
+  padding: 5px 12px;
+  text-decoration: none;
+  transition: background .15s, border-color .15s;
+}
+
+.pill-link:hover {
+  background: var(--defend-border);
+  border-color: var(--defend);
+}
+
+.pill-link:focus-visible {
+  outline: 2px solid var(--defend);
+  outline-offset: 2px;
+}
+
+.page-footer {
+  padding-block: 40px 0;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.footer-label {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+</style>
+
+<div class="wrap">
+
+  <!-- ── COVER ── -->
+  <header class="cover">
+    <div class="cover-label">Threat case study · DNS infrastructure</div>
+    <h1>Poisoning the Cache:<br><em>radblok.co.za</em></h1>
+    <p class="cover-sub">A step-by-step walkthrough of how an attacker hijacks a domain by feeding a lie to the world's most trusted resolver — and why a missing cryptographic signature is all it takes.</p>
+    <div class="meta-row">
+      <span>Target: <b>radblok.co.za</b></span>
+      <span>Vulnerability: <b>DNSSEC unsigned</b></span>
+      <span>Resolver: <b>8.8.8.8 (Google)</b></span>
+      <span>Status: <b>unfixed</b></span>
+    </div>
+    <div class="cover-links">
+      <a href="https://claude.ai/artifact/AyHBYshYXbsvw79zTGxUqL" target="_blank" rel="noopener" class="pill-link">↗ radlee Lab Notes — Entry 007</a>
+    </div>
+  </header>
+
+  <!-- ── BACKGROUND ── -->
+  <section>
+    <div class="section-label">01 — Background</div>
+    <h2>How DNS caching creates the attack surface</h2>
+    <p>When anyone types <code>radblok.co.za</code> into a browser, their device asks a <strong>recursive resolver</strong> — usually their ISP's, or Google's <code>8.8.8.8</code>, or Cloudflare's <code>1.1.1.1</code> — to find the IP address. The resolver walks a chain: root nameservers, then ZARC for <code>.co.za</code>, then xneelo's nameservers, which give the real answer.</p>
+    <p>The resolver then <strong>caches that answer</strong> — saves it — and reuses it for every client who asks the same question, until a timer (the TTL) expires. It does not go back to xneelo each time. That cache is the attack surface.</p>
+    <p>There is <strong>no authentication</strong> in this chain. DNS runs over UDP — a fire-and-forget protocol with no handshake. The resolver cannot verify that a response is genuine. It trusts whoever answered first.</p>
+
+    <div class="flow">
+      <div class="flow-row">
+        <div class="node dns-node"><b>8.8.8.8</b>resolver</div>
+        <div class="arrow-col">
+          <div class="arrow real">
+            <span>asks →</span>
+            <div class="line"></div>
+            <span class="arrowhead">→</span>
+          </div>
+          <div class="arrow real">
+            <span class="arrowhead">←</span>
+            <div class="line"></div>
+            <span>real answer ←</span>
+          </div>
+        </div>
+        <div class="node real-node"><b>ns1.host-h.net</b>xneelo / ZARC</div>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <b>The caching problem</b>
+      Once a fake answer is in the cache, every person using that resolver gets the wrong IP — not just the person the attacker targeted. The cache is shared by millions of users.
+    </div>
+  </section>
+
+  <!-- ── ATTACK ── -->
+  <section>
+    <div class="section-label">02 — The attack</div>
+    <h2>How an attacker plants a fake answer</h2>
+    <p>This is the Kaminsky attack, published 2008. The core insight: if you can get a fake DNS response to the resolver before the real one arrives, the resolver accepts it as truth.</p>
+
+    <div class="steps">
+      <div class="step attack">
+        <div class="step-num">01</div>
+        <div class="step-body">
+          <div class="step-title">Attacker triggers a lookup</div>
+          <div class="step-desc">The attacker asks <code>8.8.8.8</code> to resolve <code>radblok.co.za</code>. If the answer isn't already cached, the resolver sends a query to xneelo's nameserver with a random transaction ID — say <code>#4821</code> — to match the response to the question.</div>
+        </div>
+      </div>
+      <div class="step attack">
+        <div class="step-num">02</div>
+        <div class="step-body">
+          <div class="step-title">Attacker floods the resolver with fake replies</div>
+          <div class="step-desc">While <code>8.8.8.8</code> is waiting for xneelo to respond, the attacker sends thousands of forged UDP packets — each claiming to be from <code>ns1.host-h.net</code>, each with a different guessed transaction ID, all saying <code>radblok.co.za = 45.33.100.1</code> (the attacker's server).</div>
+        </div>
+      </div>
+      <div class="step dns">
+        <div class="step-num">03</div>
+        <div class="step-body">
+          <div class="step-title">One fake reply wins the race</div>
+          <div class="step-desc">One of those thousands of fakes happens to carry <code>#4821</code> — the same transaction ID the resolver is waiting for. It arrives a few milliseconds before xneelo's real reply. The resolver accepts it. The real reply arrives and is discarded — the cache already has an answer.</div>
+        </div>
+      </div>
+      <div class="step dns">
+        <div class="step-num">04</div>
+        <div class="step-body">
+          <div class="step-title">The lie is now cached</div>
+          <div class="step-desc">The resolver's cache now reads: <code>radblok.co.za → 45.33.100.1</code>. No error. No warning. From the resolver's perspective, it got a valid-looking response. Without DNSSEC, there are no signatures to check.</div>
+        </div>
+      </div>
+      <div class="step victim">
+        <div class="step-num">05</div>
+        <div class="step-body">
+          <div class="step-title">Every user is now redirected</div>
+          <div class="step-desc">Anyone whose device uses <code>8.8.8.8</code> and requests <code>radblok.co.za</code> now gets <code>45.33.100.1</code> — the attacker's server — for as long as the TTL holds. Could be an hour. Could be 24 hours. Millions of users share this cache.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow">
+      <div class="flow-row">
+        <div class="node dns-node"><b>8.8.8.8</b>poisoned</div>
+        <div class="arrow-col">
+          <div class="arrow fake">
+            <span class="arrowhead">←</span>
+            <div class="line"></div>
+            <span>fake reply wins ←</span>
+          </div>
+          <div class="arrow real">
+            <span class="arrowhead">←</span>
+            <div class="line"></div>
+            <span>real reply (too late)</span>
+          </div>
+        </div>
+        <div class="node attack-node"><b>attacker</b>45.33.100.1</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── IMPACT ── -->
+  <section>
+    <div class="section-label">03 — Victim impact</div>
+    <h2>What the attacker does with a poisoned cache</h2>
+    <p>Anyone hitting the poisoned resolver lands on the attacker's server. Their browser shows <code>radblok.co.za</code> in the address bar. The attacker has a clone of the site running at that IP.</p>
+
+    <div class="impact">
+      <div class="impact-row">
+        <div class="impact-target">Login forms</div>
+        <div class="impact-desc">Fake login page harvests usernames and passwords. User never knows — the page looks identical.</div>
+        <span class="badge no">not blocked</span>
+      </div>
+      <div class="impact-row">
+        <div class="impact-target">First HTTP visit</div>
+        <div class="impact-desc">If the site redirects HTTP → HTTPS, the redirect itself hits the attacker's server first. That request is exposed before HTTPS ever fires.</div>
+        <span class="badge no">not blocked</span>
+      </div>
+      <div class="impact-row">
+        <div class="impact-target">Inbound email (MX)</div>
+        <div class="impact-desc">Attacker also poisons the MX record. All email to <code>@radblok.co.za</code> — password resets, business mail — routes to the attacker's mail server. Completely silent.</div>
+        <span class="badge no">not blocked</span>
+      </div>
+      <div class="impact-row">
+        <div class="impact-target">New visitors</div>
+        <div class="impact-desc">HSTS (the header that forces HTTPS on future visits) only applies after a first successful visit. A first-time visitor has no HSTS cache for this domain.</div>
+        <span class="badge no">not blocked</span>
+      </div>
+      <div class="impact-row">
+        <div class="impact-target">HTTPS with cert</div>
+        <div class="impact-desc">If the attacker obtains a fraudulent TLS cert for the domain — possible via a poisoned CA validation — the browser shows the padlock. Users see no warning at all.</div>
+        <span class="badge partial">partially blocked</span>
+      </div>
+    </div>
+
+    <div class="callout attack">
+      <b>The email angle is the most dangerous</b>
+      HTTPS protects web traffic. It does nothing for SMTP routing. A poisoned MX record redirects all inbound email to the attacker — password resets, business conversations, two-factor codes — with no warning anywhere in the chain.
+    </div>
+  </section>
+
+  <!-- ── DNSSEC ── -->
+  <section>
+    <div class="section-label">04 — Defense</div>
+    <h2>What DNSSEC does to stop this</h2>
+    <p>DNSSEC adds cryptographic signatures to every DNS record. xneelo signs each record with a private key held in the zone. ZARC signs a DS record (a fingerprint of xneelo's key). The root signs ZARC's key. This creates an unbroken chain of trust from the root down to every individual record in the zone.</p>
+
+    <div class="chain">
+      <div class="chain-node">
+        <div class="chain-dot"></div>
+        <div class="chain-label">Root <span>signs ZARC's key</span></div>
+      </div>
+      <div class="chain-line"></div>
+      <div class="chain-node">
+        <div class="chain-dot"></div>
+        <div class="chain-label">ZARC (.co.za) <span>signs zone key for radblok.co.za</span></div>
+      </div>
+      <div class="chain-line"></div>
+      <div class="chain-node">
+        <div class="chain-dot"></div>
+        <div class="chain-label">radblok.co.za zone <span>signs every record (A, MX, TXT…)</span></div>
+      </div>
+    </div>
+
+    <p>When the resolver receives any response about <code>radblok.co.za</code>, it checks the signature against this chain. A poisoned fake reply — even if it carries the right transaction ID — carries no valid signature. The resolver throws it away and returns <code>SERVFAIL</code>. The attack fails at the resolver, before the client ever sees a result.</p>
+
+    <div class="codeblock">
+      <div class="code-label">kali — verify DNSSEC after enabling</div>
+      <pre><span class="c"># Should see RRSIG records and the 'ad' flag (authenticated data)</span>
+$ dig radblok.co.za A +dnssec
+
+;; flags: qr rd ra <span class="ok">ad</span>; QUERY: 1, ANSWER: 2
+radblok.co.za.  300  IN  A      X.X.X.X
+radblok.co.za.  300  IN  <span class="ok">RRSIG</span>  A 13 3 300 ... (signature)
+
+<span class="c"># Check DS record exists at ZARC level</span>
+$ dig radblok.co.za DS +trace</pre>
+    </div>
+
+    <div class="callout defend">
+      <b>What changes for the attacker</b>
+      With DNSSEC enabled, the fake reply fails the signature check at 8.8.8.8. The resolver returns SERVFAIL instead of the poisoned answer. The attacker would need to compromise the zone signing key itself — a fundamentally different and much harder attack.
+    </div>
+  </section>
+
+  <!-- ── ACTION ── -->
+  <section>
+    <div class="section-label">05 — Action items</div>
+    <h2>Closing the gap on radblok.co.za</h2>
+
+    <div class="actions">
+      <div class="action">
+        <div class="action-icon">fix 1</div>
+        <div class="action-text"><strong>Enable DNSSEC via xneelo.</strong> Log in to the xneelo control panel → DNS settings for radblok.co.za → enable DNSSEC. xneelo generates the zone keys, signs all records, and submits the DS record to ZARC automatically. Propagates in up to 48 hours.</div>
+      </div>
+      <div class="action">
+        <div class="action-icon">fix 2</div>
+        <div class="action-text"><strong>Add a CAA record.</strong> A CAA (Certification Authority Authorization) record tells every certificate authority which ones are allowed to issue TLS certs for your domain. Prevents fraudulent cert issuance even if a CA's validation is bypassed. Example: <code>radblok.co.za CAA 0 issue "letsencrypt.org"</code></div>
+      </div>
+      <div class="action">
+        <div class="action-icon">fix 3</div>
+        <div class="action-text"><strong>Set an HSTS header with a long max-age.</strong> Once a visitor has seen the HSTS header, their browser enforces HTTPS for future visits without a round-trip to the server. Eliminates the HTTP-first window for returning users.</div>
+      </div>
+      <div class="action">
+        <div class="action-icon">verify</div>
+        <div class="action-text"><strong>Check with <code>dig radblok.co.za A +dnssec</code> after enabling.</strong> Look for <code>RRSIG</code> records in the answer section and the <code>ad</code> flag in the response header. Both present = chain of trust is working end to end.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FOOTER ── -->
+  <footer class="page-footer">
+    <span class="footer-label">radlee Lab Notes · recon &amp; scanning module</span>
+    <a href="https://claude.ai/artifact/AyHBYshYXbsvw79zTGxUqL" target="_blank" rel="noopener" class="pill-link">↗ Back to Lab Notes</a>
+  </footer>
+
+</div>

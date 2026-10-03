@@ -1,0 +1,51 @@
+{
+  "n": 17,
+  "date": "2026-10-02",
+  "module": "Reconnaissance & scanning",
+  "title": "DNS Zone Transfer (AXFR) with Dig: TCP 53 EOF vs RFC-compliant refusal",
+  "tags": ["dns", "axfr", "dig", "zone-transfer", "recon", "tcp53", "radblok"],
+  "summary": "Tested DNS zone transfers (AXFR) using dig against xneelo's authoritative nameservers (ns1/ns2.host-h.net) and compared the behavior against enterprise infrastructure (Facebook). The tests revealed two distinct hardening mechanisms: xneelo forcefully drops TCP port 53 connections resulting in 'end of file' errors, whereas enterprise DNS completes the TCP handshake, returns the initial SOA record, and formally responds with a protocol-level refusal (Transfer failed). Neither server permitted zone disclosure.",
+  "sections": [
+    {
+      "h": "The AXFR tests",
+      "blocks": [
+        {"t": "code", "label": "kali", "text": "$ dig axfr @ns1.host-h.net radblok.co.za\n;; communications error to 129.232.248.30#53: end of file\n;; communications error to 129.232.248.30#53: end of file\n;; communications error to 129.232.248.30#53: end of file\n;; no servers could be reached\n\n$ dig axfr facebook.com @A.NS.FACEBOOK.COM\nfacebook.com.   3600    IN      SOA     a.ns.facebook.com. dns.facebook.com. ...\n; Transfer failed."},
+        {"t": "p", "text": "Two completely different rejection signatures when attempting to transfer a zone. Understanding why they look different requires looking at how DNS works at Layer 4 (Transport)."}
+      ]
+    },
+    {
+      "h": "Why AXFR uses TCP port 53 instead of UDP",
+      "blocks": [
+        {"t": "p", "text": "Almost all routine DNS lookups (`A`, `MX`, `TXT`) use **UDP port 53**. UDP is stateless, lightweight, and fast, but legacy UDP DNS packets are limited to 512 bytes (or ~1232–4096 bytes with modern EDNS0)."},
+        {"t": "p", "text": "A complete DNS zone file containing hundreds or thousands of records can easily exceed hundreds of kilobytes. Therefore, RFC 1035 and RFC 5936 mandate that **DNS Zone Transfers (AXFR) must occur over TCP port 53** to ensure reliable, connection-oriented data transfer and retransmission."}
+      ]
+    },
+    {
+      "h": "Two defensive refusal signatures",
+      "blocks": [
+        {"t": "table", "head": ["Server Tested", "Response from dig", "Underlying Mechanism"], "rows": [
+          ["`ns1.host-h.net` (xneelo)", "`communications error ...: end of file`", "**Transport-level drop / TCP RST**. The firewall or BIND daemon at `129.232.248.30` accepts or intercepts the initial TCP connection on port 53, detects an unauthorized AXFR request, and immediately tears down the socket by sending a TCP FIN/RST packet without returning any DNS payload. `dig` receives 0 bytes from the closed stream, which it reports as `end of file`."],
+          ["`a.ns.facebook.com`", "`SOA ... ; Transfer failed.`", "**Protocol-level refusal (RFC 5936)**. The nameserver completes the TCP handshake, echoes the start-of-authority (`SOA`) record to acknowledge the zone, and then explicitly transmits a DNS `REFUSED` (RCODE 5) header before terminating the transfer."]
+        ]},
+        {"t": "note", "kind": "tip", "text": "Both configurations are completely secure: neither server allows unauthorized zone transfers. The `end of file` signature is simply an abrupt network-level socket termination, while `Transfer failed` is an explicit, protocol-compliant rejection."}
+      ]
+    },
+    {
+      "h": "Bonus observation: radblok.com vs radblok.co.za",
+      "blocks": [
+        {"t": "p", "text": "Resolving `radblok.com` returned `198.12.232.136`. This confirms `.com` is a completely different domain entity registered independently on a different network, whereas `radblok.co.za` is the target connected to Render/Cloudflare (`216.24.57.1`). Always double-check ccTLD vs gTLD boundaries during scoping."}
+      ]
+    },
+    {
+      "h": "Lab status & takeaways",
+      "blocks": [
+        {"t": "list", "items": [
+          "Demonstrated how AXFR queries operate over TCP 53 to pull complete zone records.",
+          "Verified that both authoritative nameservers (`ns1/ns2.host-h.net`) strictly block zone transfers.",
+          "Identified the difference between TCP RST socket termination (`end of file`) and DNS protocol refusal (`Transfer failed`).",
+          "Confirmed that brute-force / dictionary enumeration is required since AXFR is blocked."
+        ]}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "sections": [
+    {
+      "h": "Attempt 1: no arguments",
+      "blocks": [
+        {"t": "code", "label": "kali", "text": "$ theHarvester\ntheHarvester: error: the following arguments are required: -d/--domain"},
+        {"t": "p", "text": "theHarvester requires `-d` (domain) at minimum. Running it bare just prints usage. The full argument list from the error output is worth keeping as a reference:"},
+        {"t": "table", "head": ["Flag", "What it does"], "rows": [
+          ["`-d DOMAIN`", "Target domain — **required**"],
+          ["`-b SOURCE`", "Data source(s) to query — **required**"],
+          ["`-l LIMIT`", "Max results to retrieve (default 500)"],
+          ["`-S START`", "Start at result N (pagination)"],
+          ["`-f FILENAME`", "Save results to file (JSON + XML)"],
+          ["`-r`", "Resolve discovered hostnames to IPs"],
+          ["`-n`", "Perform reverse DNS on discovered IPs"],
+          ["`-c`", "DNS brute-force using default wordlist"],
+          ["`-w WORDLIST`", "DNS brute-force with custom wordlist"],
+          ["`-e DNS_SERVER`", "Use a specific DNS server"],
+          ["`-t`", "Use DNS takeover checks"],
+          ["`-s`", "Use Shodan"],
+          ["`-p`", "Use proxies from proxies.yaml"],
+          ["`-a`", "Use all available sources"],
+          ["`-q`", "Quiet mode — less output"]
+        ]}
+      ]
+    },
+    {
+      "h": "Attempt 2: google source — same error as Entry 005",
+      "blocks": [
+        {"t": "code", "label": "kali", "text": "$ theHarvester -d radblok.co.za -l 500 -b google\nThe following engines are not supported: {'google'}\n[!] Invalid source."},
+        {"t": "p", "text": "Google scraping was removed from theHarvester 4.11.1 entirely — Google actively blocks it. This is the same error hit in Entry 005 against microsoft.com. **The `-b google` habit doesn't work in this version.**"}
+      ]
+    },
+    {
+      "h": "Attempt 3: crtsh + dnsdumpster + hackertarget — real results",
+      "blocks": [
+        {"t": "code", "label": "kali", "text": "$ theHarvester -d radblok.co.za -b crtsh,dnsdumpster,hackertarget\n\n[!] Missing API key for DNSDumpster.\n[*] Searching CRTsh.\n[*] Searching Hackertarget.\n\n[*] No IPs found.\n[*] No emails found.\n[*] No people found.\n\n[*] Hosts found: 1\n---------------------\nmail.radblok.co.za:216.24.57.1"},
+        {"t": "table", "head": ["Source", "Outcome"], "rows": [
+          ["`dnsdumpster`", "**Skipped** — now requires an API key. Was free when documented in Entry 005. Policy changed."],
+          ["`crtsh`", "Searched — certificate transparency logs"],
+          ["`hackertarget`", "Searched — passive DNS"]
+        ]},
+        {"t": "p", "text": "One real finding: **`mail.radblok.co.za` resolves to `216.24.57.1`**. This subdomain was not in the whois record — it came from CT logs or hackertarget's passive DNS crawl. theHarvester found something that wasn't directly visible before."}
+      ]
+    },
+    {
+      "h": "What mail.radblok.co.za:216.24.57.1 actually tells us",
+      "blocks": [
+        {"t": "p", "text": "Breaking it down:"},
+        {"t": "table", "head": ["Piece", "What it means"], "rows": [
+          ["`mail.radblok.co.za`", "A subdomain — whoever set up the domain created a `mail` DNS record. Standard naming for a mail server."],
+          ["`216.24.57.1`", "The IP address that subdomain resolves to. Almost certainly xneelo's shared mail hosting — the same provider as the registrar and nameservers."],
+          ["Not in whois", "whois only shows nameservers and registrar. Subdomains and their IPs live in DNS records, not the whois record — which is why tools like theHarvester exist."]
+        ]},
+        {"t": "p", "text": "From a recon perspective: finding `mail.radblok.co.za` confirms there is mail infrastructure set up for the domain. Combined with the MX record (which `dig radblok.co.za MX` will show), this tells you where inbound email is handled. The IP `216.24.57.1` is the next thing to investigate — a reverse DNS lookup and a port scan would tell you what's running there."},
+        {"t": "code", "label": "kali — follow-up lookups", "text": "# What subdomain does 216.24.57.1 reverse-resolve to?\n$ dig -x 216.24.57.1 +short\n\n# What MX record does radblok.co.za have?\n$ dig radblok.co.za MX +short\n\n# Does mail.radblok.co.za match what dig says directly?\n$ dig mail.radblok.co.za A +short"},
+        {"t": "note", "kind": "tip", "text": "For a target you don't own, `mail.*` is a high-value subdomain — mail servers often run older software, expose SMTP banners with version info, and are less aggressively patched than web servers. On your own domain, it's a reminder to check what's actually listening on port 25/587/993 at that IP."}
+      ]
+    },
+    {
+      "h": "DNSDumpster API key — what changed",
+      "blocks": [
+        {"t": "p", "text": "DNSDumpster was listed in Entry 008 as a free no-API-key source. That was true when Entry 005 was written — it has since moved to a key-required model. To use it:"},
+        {"t": "steps", "items": [
+          "Register at dnsdumpster.com and get a free API key.",
+          "Add it to `/etc/theHarvester/api-keys.yaml` under the `dnsdumpster` key.",
+          "Re-run — theHarvester will pick it up automatically."
+        ]},
+        {"t": "note", "kind": "warn", "text": "Several theHarvester sources have gone API-key-only over time as their providers tightened access. Always check the `[!] Missing API key` lines in output — they tell you which sources were silently skipped."}
+      ]
+    },
+    {
+      "h": "Lab status",
+      "blocks": [
+        {"t": "list", "items": [
+          "Confirmed `-b google` still broken — not worth trying again.",
+          "DNSDumpster now requires an API key — not free anymore, update api-keys.yaml if wanted.",
+          "**Real finding**: `mail.radblok.co.za:216.24.57.1` — a mail subdomain not visible in whois, found via CT logs / passive DNS.",
+          "This is what theHarvester is for: surfacing DNS records that exist but aren't advertised.",
+          "Next: `dig radblok.co.za MX`, `dig mail.radblok.co.za A`, and `dig -x 216.24.57.1` to follow up on the mail server finding."
+        ]}
+      ]
+    }
+  ]
+}

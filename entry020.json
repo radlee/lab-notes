@@ -1,0 +1,44 @@
+{
+  "n": 20,
+  "date": "2026-10-02",
+  "module": "Post-Exploitation & System Auditing",
+  "title": "Internal System Auditing: Shadow Hashes, xinetd Superserver & Socket Discovery",
+  "tags": ["post-exploitation", "shadow", "md5crypt", "xinetd", "netstat", "distccd", "metasploitable"],
+  "summary": "Audited critical internal OS files from the root shell on Metasploitable 2. Identified MD5-crypt ($1$) password hashes in /etc/shadow, tracked down the superserver daemon (xinetd PID 4622) managing port 1524, and analyzed internal socket bindings via netstat to reveal hidden internal attack surfaces including distccd (port 3632) and Ruby (port 8787).",
+  "sections": [
+    {
+      "h": "1. Why grep on /etc/inetd.conf returned empty",
+      "blocks": [
+        {"t": "p", "text": "Running `grep 1524 /etc/inetd.conf` returned no output because modern Linux systems (and Ubuntu 8.04) migrated from the monolithic legacy `inetd` to modular **`xinetd`** (Extended Internet Services Daemon)."},
+        {"t": "p", "text": "Looking at the `netstat -tulnp` output confirms PID `4622` is **`xinetd`**, which manages individual service files inside `/etc/xinetd.d/`. The bindshell configuration is located inside `/etc/xinetd.d/` or `/etc/xinetd.conf`."}
+      ]
+    },
+    {
+      "h": "2. Linux Shadow Hash Cryptanalysis (/etc/shadow)",
+      "blocks": [
+        {"t": "p", "text": "Dumping `/etc/shadow` reveals the authentication state of every user account on the system. All non-locked passwords use the **`$1$`** prefix:"},
+        {"t": "table", "head": ["Username", "Hash Field", "Hash Type / Status", "Security Analysis"], "rows": [
+          ["`root`", "`$1$/avpfBJ1$x0z8w5UF9Iv./DR9E9Lid.`", "MD5-crypt (`$1$`)", "Salt: `/avpfBJ1`. Vulnerable to high-speed offline dictionary attacks."],
+          ["`msfadmin`", "`$1$XN10Zj2c$Rt/zzCW3mLtUWA.ihZjA5/`", "MD5-crypt (`$1$`)", "Salt: `XN10Zj2c`. Known weak default password (`msfadmin`)."],
+          ["`user`", "`$1$HESu9xrH$k.o3G93DGoXIiQKkPmUgZ0`", "MD5-crypt (`$1$`)", "Standard user account with weak credentials (`user`)."],
+          ["`postgres`", "`$1$Rw35ik.x$MgQgZUuO5pAoUvfJhfcYe/`", "MD5-crypt (`$1$`)", "Database superuser with local OS password (`postgres`)."],
+          ["`sys`, `klog`, `service`", "`$1$...`", "MD5-crypt (`$1$`)", "Active password hashes set on system maintenance accounts."],
+          ["`bin`, `daemon`, `nobody`", "`*` or `!`", "Locked / No Password", "System accounts disabled from direct password authentication."]
+        ]},
+        {"t": "note", "kind": "important", "text": "Password Hash Identifiers: `$1$` = MD5-crypt (obsolete and computationally trivial to crack with modern GPUs), `$5$` = SHA-256, `$6$` = SHA-512, `$y$` = yescrypt (modern standard)."}
+      ]
+    },
+    {
+      "h": "3. Internal Socket & Service Discovery (netstat -tulnp)",
+      "blocks": [
+        {"t": "p", "text": "Comparing the internal `netstat` socket list against our external Nmap scan revealed services managed by central daemons and internal-only bindings:"},
+        {"t": "list", "items": [
+          "**xinetd Fleet (PID 4622)**: Handles ports 21 (ftp), 23 (telnet), 512 (rexec), 513 (rlogin), 514 (rsh), 69 (tftp), and 1524 (ingreslock).",
+          "**Port 3632 (distccd)**: Discovered listening on IPv6/IPv4 (`4468/distccd`). distcc is famous for CVE-2004-2687, enabling remote code execution without authentication.",
+          "**Port 8787 (ruby)**: Internal Ruby process running web or RPC interfaces (`4760/ruby`).",
+          "**Port 6000 (Xtightvnc / X11)**: External scan showed `X11 (access denied)` — `netstat` confirms PID 4777 binds both TCP 5900 (RFB protocol) and 6000 (X11 server)."
+        ]}
+      ]
+    }
+  ]
+}

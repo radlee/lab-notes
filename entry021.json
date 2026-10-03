@@ -1,0 +1,48 @@
+{
+  "n": 21,
+  "date": "2026-10-03",
+  "module": "Reconnaissance & scanning",
+  "title": "Backend REST API Reconnaissance: radblok-api.onrender.com & Mongoose Model Discovery",
+  "tags": ["api", "recon", "express", "mongodb", "mongoose", "render", "radblok", "rest"],
+  "summary": "Reconnaissance shifted to the newly enabled backend application at https://radblok-api.onrender.com. Layer 7 HTTP analysis identified a live Node.js/Express service interacting with a MongoDB database (evidenced by Mongoose ObjectIds and __v fields) and Cloudinary media assets. Successfully mapped public endpoints (/api, /api/users, /api/posts) revealing application structure, user metadata, and content architecture.",
+  "sections": [
+    {
+      "h": "Service Activation & Header Fingerprinting",
+      "blocks": [
+        {"t": "p", "text": "Probing `https://radblok-api.onrender.com` confirmed that unlike the suspended frontend, the backend Render service is active and communicating with its origin:"},
+        {"t": "code", "label": "curl", "text": "$ curl -IL https://radblok-api.onrender.com/api\nHTTP/1.1 200 OK\nContent-Type: text/html; charset=utf-8\naccess-control-allow-credentials: true\naccess-control-allow-methods: GET,HEAD,PUT,PATCH,POST,DELETE\nx-powered-by: Express\nx-render-origin-server: Render\nServer: cloudflare\nCF-RAY: ...-CPT\n\nWelcome to radblok API"},
+        {"t": "p", "text": "The presence of `x-render-origin-server: Render` and the absence of `x-render-routing: suspend-by-user` confirms the backend web process is awake and executing requests."}
+      ]
+    },
+    {
+      "h": "Endpoint Enumeration & Data Models",
+      "blocks": [
+        {"t": "p", "text": "Testing common REST API routes exposed several active endpoints returning structured JSON data:"},
+        {"t": "table", "head": ["Endpoint", "HTTP Status", "Response / Architecture Clues"], "rows": [
+          ["`GET /`", "`500 Internal Server Error`", "`{\"message\":\"Not Found - / \"}` — Express error handling middleware."],
+          ["`GET /api`", "`200 OK`", "`Welcome to radblok API` — Root API health string."],
+          ["`GET /api/users`", "`200 OK`", "JSON array disclosing author profiles: `name`, `email` (`leecpt@gmail.com`), `posts` count, and Cloudinary avatar URI."],
+          ["`GET /api/posts`", "`200 OK`", "JSON object returning `total: 3` and post array with titles ('Bring in the Master!', 'Back On The Line'), HTML content, and timestamps."]
+        ]}
+      ]
+    },
+    {
+      "h": "Underlying Technology Stack Fingerprint",
+      "blocks": [
+        {"t": "list", "items": [
+          "**Runtime / Web Framework**: Node.js with **Express** (`x-powered-by: Express`).",
+          "**Database Layer**: **MongoDB** with **Mongoose ODM** — indicated by 24-character hexadecimal `_id` values (e.g. `68bb71563cab34b0badf6cbe`) and the internal Mongoose versioning attribute `__v: 0`.",
+          "**Media Storage**: **Cloudinary** CDN (`res.cloudinary.com/dhdc57kw9/...`) for user avatars and article thumbnails.",
+          "**Edge / Network**: **Cloudflare** Cape Town PoP (`CPT`) providing TLS termination and reverse proxying to Render PaaS."
+        ]}
+      ]
+    },
+    {
+      "h": "Security & Exposure Analysis",
+      "blocks": [
+        {"t": "p", "text": "1. **User Metadata Disclosure**: The `GET /api/users` endpoint returns author emails and MongoDB internal IDs without authentication. In pen-testing scopes, this provides valid usernames for brute-force or credential stuffing against authentication endpoints."},
+        {"t": "p", "text": "2. **CORS Configuration**: `access-control-allow-credentials: true` is enabled. Once the frontend `radblok.co.za` is reactivated, origin verification on cookies and tokens can be audited for cross-origin risks."}
+      ]
+    }
+  ]
+}

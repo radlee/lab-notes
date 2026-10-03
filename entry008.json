@@ -1,0 +1,85 @@
+{
+  "n": 8,
+  "date": "2026-10-01",
+  "module": "Reconnaissance & scanning",
+  "title": "theHarvester against radblok.co.za",
+  "tags": ["theHarvester", "recon", "osint", "radblok", "crtsh"],
+  "summary": "Ran theHarvester against my own domain radblok.co.za. Hit the google source error again (removed in 4.11.1 — same as Entry 005). Documented the correct free sources for a .co.za domain and what to realistically expect from a small 2-year-old site.",
+  "sections": [
+    {
+      "h": "Attempt 1: no arguments",
+      "blocks": [
+        {"t": "code", "label": "kali", "text": "$ theHarvester\ntheHarvester: error: the following arguments are required: -d/--domain"},
+        {"t": "p", "text": "theHarvester requires `-d` (domain) at minimum. Running it bare just prints usage. The full argument list from the error output is worth keeping as a reference:"},
+        {"t": "table", "head": ["Flag", "What it does"], "rows": [
+          ["`-d DOMAIN`", "Target domain — **required**"],
+          ["`-b SOURCE`", "Data source(s) to query — **required**"],
+          ["`-l LIMIT`", "Max results to retrieve (default 500)"],
+          ["`-S START`", "Start at result N (pagination)"],
+          ["`-f FILENAME`", "Save results to file (JSON + XML)"],
+          ["`-r`", "Resolve discovered hostnames to IPs"],
+          ["`-n`", "Perform reverse DNS on discovered IPs"],
+          ["`-c`", "DNS brute-force using default wordlist"],
+          ["`-w WORDLIST`", "DNS brute-force with custom wordlist"],
+          ["`-e DNS_SERVER`", "Use a specific DNS server"],
+          ["`-t`", "Use DNS takeover checks"],
+          ["`-s`", "Use Shodan"],
+          ["`-p`", "Use proxies from proxies.yaml"],
+          ["`-a`", "Use all available sources"],
+          ["`-q`", "Quiet mode — less output"]
+        ]}
+      ]
+    },
+    {
+      "h": "Attempt 2: google source — same error as Entry 005",
+      "blocks": [
+        {"t": "code", "label": "kali", "text": "$ theHarvester -d radblok.co.za -l 500 -b google\nThe following engines are not supported: {'google'}\n[!] Invalid source."},
+        {"t": "p", "text": "Google scraping was removed from theHarvester 4.11.1 entirely — Google actively blocks it. This is the same error hit in Entry 005 against microsoft.com. **The `-b google` habit doesn't work in this version.** Use `crtsh`, `dnsdumpster`, `hackertarget` or other sources instead."}
+      ]
+    },
+    {
+      "h": "Correct approach: working sources for a .co.za domain",
+      "blocks": [
+        {"t": "p", "text": "For `radblok.co.za` — a small, 2-year-old domain registered with xneelo — the most realistic free sources are:"},
+        {"t": "table", "head": ["Source", "What it searches", "Needs API key?"], "rows": [
+          ["`crtsh`", "Certificate Transparency logs — every TLS cert ever issued for the domain", "No"],
+          ["`dnsdumpster`", "Passive DNS — historical records from DNS crawls", "No"],
+          ["`hackertarget`", "Passive DNS + reverse IP lookups", "No"],
+          ["`urlscan`", "Pages scanned by urlscan.io that reference the domain", "No"],
+          ["`otx`", "AlienVault OTX — threat intelligence, passive DNS", "No"],
+          ["`rapiddns`", "Rapid DNS passive database", "No"]
+        ]},
+        {"t": "code", "label": "kali — crtsh (best first try, no API needed)", "text": "$ theHarvester -d radblok.co.za -l 500 -b crtsh"},
+        {"t": "code", "label": "kali — multiple sources at once", "text": "$ theHarvester -d radblok.co.za -l 500 -b crtsh,dnsdumpster,hackertarget"},
+        {"t": "code", "label": "kali — save results to file", "text": "$ theHarvester -d radblok.co.za -l 500 -b crtsh,dnsdumpster -f radblok_harvest\n# Writes radblok_harvest.json and radblok_harvest.xml"},
+        {"t": "note", "kind": "tip", "text": "For a large domain (microsoft.com, github.com) crtsh has thousands of CT log entries. For a small personal domain like `radblok.co.za` with one or two certs ever issued, results will be thin — that's expected, not a tool failure."}
+      ]
+    },
+    {
+      "h": "What to realistically expect from radblok.co.za",
+      "blocks": [
+        {"t": "p", "text": "radblok.co.za was registered 2024-04-09 and is 2 years old with xneelo hosting. Realistic expectations per source:"},
+        {"t": "table", "head": ["Source", "Expected result"], "rows": [
+          ["`crtsh`", "One or two certs (wildcard `*.radblok.co.za` or bare domain). Fewer certs than github.com by orders of magnitude."],
+          ["`dnsdumpster`", "May show the A record and nameservers — same info as whois/dig, just from a different angle."],
+          ["`hackertarget`", "Similar — passive DNS from crawls, likely just the main A record."],
+          ["`urlscan`", "Only shows results if the domain was previously submitted or crawled by urlscan.io. Could be empty."],
+          ["`otx`", "Threat intel — will likely return nothing for a clean personal domain."]
+        ]},
+        {"t": "p", "text": "A thin result is not a bug. theHarvester is built for recon against targets that have significant public footprint. Against your own small domain it confirms what you already know from whois and dig — useful for verifying the tool works and understanding what each source actually queries."},
+        {"t": "note", "kind": "warn", "text": "The crtsh 502 issue from Entry 005 (wildcard query against huge domains failing silently as 'no hosts found') is less likely for a small domain — crtsh handles small exact-match queries reliably. If you see 'No hosts found' on `radblok.co.za`, it likely means no CT logs exist yet, not a crtsh failure."}
+      ]
+    },
+    {
+      "h": "Lab status",
+      "blocks": [
+        {"t": "list", "items": [
+          "Confirmed `-b google` is still broken in 4.11.1 — same as Entry 005, not version-specific to this run.",
+          "Documented the full theHarvester flag reference from the usage output.",
+          "Identified correct free sources for a .co.za domain: `crtsh`, `dnsdumpster`, `hackertarget`, `urlscan`, `otx`.",
+          "Next: run `theHarvester -d radblok.co.za -b crtsh,dnsdumpster,hackertarget` and log the actual output."
+        ]}
+      ]
+    }
+  ]
+}

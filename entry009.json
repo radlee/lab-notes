@@ -1,0 +1,74 @@
+{
+  "n": 9,
+  "date": "2026-10-01",
+  "module": "Reconnaissance & scanning",
+  "title": "dig follow-up: radblok.co.za is hosted on Render, not xneelo",
+  "tags": ["dig", "dns", "recon", "render", "radblok", "mx", "reverse-dns"],
+  "summary": "Three dig commands to follow up on theHarvester's mail.radblok.co.za finding. MX record confirmed, IP confirmed, but the reverse DNS was the surprise: 216.24.57.1 belongs to Render.com — a cloud hosting platform — not xneelo. This corrects the assumption from Entry 006 that xneelo was the hosting provider. Nameservers and hosting are two different things.",
+  "sections": [
+    {
+      "h": "The three commands and their output",
+      "blocks": [
+        {"t": "code", "label": "kali", "text": "$ dig radblok.co.za MX +short\n10 mail.radblok.co.za.\n\n$ dig mail.radblok.co.za A +short\n216.24.57.1\n\n$ dig -x 216.24.57.1 +short\nip-216-24-57-1.ingress.render.com."}
+      ]
+    },
+    {
+      "h": "Reading the MX record",
+      "blocks": [
+        {"t": "p", "text": "`10 mail.radblok.co.za.` breaks into two parts:"},
+        {"t": "table", "head": ["Part", "Meaning"], "rows": [
+          ["`10`", "**Priority** — when multiple MX records exist, lower number = higher priority. A single record means all mail goes here."],
+          ["`mail.radblok.co.za.`", "**Mail exchanger** — the hostname that receives inbound email for the domain. The trailing dot is standard DNS notation for a fully-qualified domain name."]
+        ]},
+        {"t": "p", "text": "The MX record points to `mail.radblok.co.za` — a subdomain of the same domain. That subdomain resolves to `216.24.57.1`. So all email to `@radblok.co.za` gets routed to that IP."}
+      ]
+    },
+    {
+      "h": "The Render reveal — reverse DNS",
+      "blocks": [
+        {"t": "code", "label": "kali", "text": "$ dig -x 216.24.57.1 +short\nip-216-24-57-1.ingress.render.com."},
+        {"t": "p", "text": "`dig -x` does a **PTR lookup** — the reverse of a normal A lookup. Instead of 'what IP does this hostname resolve to', it asks 'what hostname does this IP reverse to'. The answer: `ip-216-24-57-1.ingress.render.com` — which is **Render.com's infrastructure**, not xneelo."},
+        {"t": "p", "text": "**Render** is a cloud application hosting platform (similar to Heroku or Railway). The `ingress` part of the hostname is Render's load-balancer layer — the entry point that receives traffic and routes it to the deployed application. This IP is one of Render's shared ingress nodes."},
+        {"t": "note", "kind": "warn", "text": "**This corrects Entry 006.** The assumption there was: 'nameservers are xneelo, therefore xneelo is the hosting provider.' That was wrong. xneelo manages the **DNS** (nameservers, whois, domain registration). The actual **application** runs on Render. These are two completely separate providers."}
+      ]
+    },
+    {
+      "h": "The actual architecture of radblok.co.za",
+      "blocks": [
+        {"t": "table", "head": ["Layer", "Provider", "How we know"], "rows": [
+          ["Domain registration", "xneelo (Pty) Ltd", "whois — Registrar field"],
+          ["DNS management (nameservers)", "xneelo / host-h.net", "whois — Name Server fields"],
+          ["Application hosting", "**Render.com**", "`dig -x 216.24.57.1` → `ingress.render.com`"],
+          ["Mail routing", "Points to Render IP", "`dig MX` → `mail.radblok.co.za` → `216.24.57.1`"]
+        ]},
+        {"t": "p", "text": "This is a common real-world split: one company handles domain registration and DNS, a completely different company hosts the actual application. You see this constantly — Cloudflare for DNS, AWS for hosting; GoDaddy for the domain, Vercel for the app. **whois nameservers only tell you who manages DNS. They say nothing about where the application runs.**"},
+        {"t": "note", "kind": "tip", "text": "The recon lesson: whois → nameservers → hosting is a **faulty assumption**. The correct chain is: whois gives you the registrar and nameservers; `dig A` gives you the IP; `dig -x` gives you the actual hosting provider. All three steps are needed to get the full picture."}
+      ]
+    },
+    {
+      "h": "What the mail setup means",
+      "blocks": [
+        {"t": "p", "text": "The MX record pointing to a Render IP is unusual. Render is a web app platform — it doesn't run traditional mail servers (SMTP daemons, mailboxes). Likely scenarios:"},
+        {"t": "list", "items": [
+          "The app hosted on Render handles inbound email programmatically — e.g. via a webhook from a mail service like SendGrid or Mailgun, which receives the mail and forwards parsed data to the app.",
+          "The `mail.radblok.co.za` A record was set up to point to the app server, and the MX record followed — not a traditional mail server, but a web endpoint that processes mail.",
+          "Or the MX / mail subdomain is a leftover / placeholder that doesn't have an active mail daemon listening."
+        ]},
+        {"t": "p", "text": "To confirm: a port scan of `216.24.57.1` on ports 25 (SMTP), 465 (SMTPS), 587 (submission) would tell you immediately whether a real mail service is listening there — or whether it's just a web server on 80/443."}
+      ]
+    },
+    {
+      "h": "Lab status",
+      "blocks": [
+        {"t": "list", "items": [
+          "MX record: priority 10, self-referencing `mail.radblok.co.za` → `216.24.57.1`.",
+          "Reverse DNS on `216.24.57.1`: **Render.com ingress** — not xneelo.",
+          "Corrected Entry 006 assumption: xneelo = DNS only; Render = actual hosting.",
+          "Practical lesson: whois nameservers ≠ hosting provider. Always `dig A` then `dig -x`.",
+          "Mail setup on Render is unusual — needs a port scan to confirm what's actually listening.",
+          "Next: `nmap -sV -p 25,80,443,465,587 216.24.57.1` to see what services are running on the Render node (only do this against infrastructure you own or are authorised to scan)."
+        ]}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "n": 6,
+  "date": "2026-10-01",
+  "module": "Reconnaissance & scanning",
+  "title": "whois on my own domain: radblok.co.za",
+  "tags": ["whois", "dns", "recon", "ccTLD", "co.za"],
+  "summary": "Ran whois against radblok.co.za — my own domain, so I know every field. Used it to understand what a real .co.za response looks like compared to the .com thin-WHOIS + registrar-referral pattern covered in the previous entry. Noted what leaks through contact redaction, what the nameservers reveal, and what DNSSEC unsigned actually means.",
+  "sections": [
+    {
+      "h": "The query",
+      "blocks": [
+        {"t": "code", "label": "kali", "text": "$ whois radblok.co.za"},
+        {"t": "p", "text": "Using my own domain deliberately — I know every field, so I can interpret the output against ground truth rather than guessing what a stranger's redacted record is hiding."}
+      ]
+    },
+    {
+      "h": "ccTLD vs gTLD: why .co.za looks different from .com",
+      "blocks": [
+        {"t": "p", "text": "The `.com` whois in Entry 005 came back as two stacked records: VeriSign's (the registry) pointed to the registrar's server, and the registrar gave the real data. `.co.za` doesn't do that redirect."},
+        {"t": "table", "head": ["Aspect", ".com (gTLD)", ".co.za (ccTLD)"], "rows": [
+          ["Registry", "VeriSign / ICANN-operated", "ZARC — South African ccTLD registry"],
+          ["WHOIS model", "Thin — registry points to registrar", "Thicker — ZARC returns the record directly"],
+          ["Referral", "Yes — second lookup at registrar's server", "No referral, single response"],
+          ["Privacy rules", "ICANN Temp Spec (GDPR-aligned since 2018)", "ZARC policy — contacts via RDDS referral message"]
+        ]},
+        {"t": "p", "text": "**Thin vs thick WHOIS** is an ICANN architecture choice. gTLDs like `.com` historically stored only minimal data at the registry and left the detail to each registrar. Many ccTLDs run their own full database and return everything from one place — ZARC does this for `.co.za`."}
+      ]
+    },
+    {
+      "h": "What the record actually reveals",
+      "blocks": [
+        {"t": "table", "head": ["Field", "Value", "What it tells a researcher"], "rows": [
+          ["Registrar", "xneelo (Pty) Ltd", "South African hosting company — likely also hosting the site"],
+          ["Registrant Organization", "Origin2020", "Business name — **not redacted**, unlike post-GDPR .com orgs"],
+          ["Registrant Country", "ZA", "South Africa confirmed from the record directly"],
+          ["Registrant Email", "RDDS referral", "Actual contact hidden — go through xneelo to reach the registrant"],
+          ["Name Servers", "ns1/ns2.host-h.net + ns1/ns2.dns-h.com", "xneelo's DNS infrastructure — confirms xneelo hosts the DNS"],
+          ["Created", "2024-04-09", "Domain age: just over 2 years old"],
+          ["Updated", "2026-04-09", "Exactly 2 years after creation — looks like an annual renewal"],
+          ["Expires", "2027-04-09", "Renews annually: 2024 → 2025 → 2026 → 2027"],
+          ["DNSSEC", "unsigned", "Zone is not cryptographically signed"]
+        ]},
+        {"t": "note", "kind": "tip", "text": "The org name `Origin2020` is visible even though individual contacts are redacted. Many ccTLD registries pre-date GDPR and their policies differ — legal entities (companies, orgs) are often less protected than natural persons. For a .com registered post-2018, even the org name often comes back REDACTED for any size of business."}
+      ]
+    },
+    {
+      "h": "What the nameservers reveal",
+      "blocks": [
+        {"t": "p", "text": "`ns1.host-h.net`, `ns2.host-h.net`, `ns1.dns-h.com`, `ns2.dns-h.com` — all xneelo infrastructure, split across two domain names for redundancy. If `host-h.net` had a DNS problem, `dns-h.com` would still answer, and vice versa."},
+        {"t": "p", "text": "From a recon angle: **nameservers often out the hosting provider even when registrant details are hidden.** Seeing `ns1.somehost.net` is a strong signal the site is hosted there too. Also worth noting the DNS provider can be different from the registrar — e.g. Cloudflare nameservers on a site not hosted by Cloudflare is extremely common."},
+        {"t": "note", "kind": "tip", "text": "Follow-up from nameservers: `dig radblok.co.za A` to see the actual IP, `dig radblok.co.za MX` for mail servers. Those are more actionable for understanding what's actually running than the whois record."}
+      ]
+    },
+    {
+      "h": "DNSSEC: unsigned — what that actually means",
+      "blocks": [
+        {"t": "p", "text": "**DNSSEC** lets a domain cryptographically sign its DNS records so resolvers can verify the answer hasn't been tampered with. `unsigned` means those signatures don't exist for `radblok.co.za`."},
+        {"t": "p", "text": "Without DNSSEC, a resolver that's been poisoned (given a fake cached answer) can redirect traffic to a different IP and nothing in DNS will flag it as wrong. The client has no way to tell at the DNS level that the answer is forged."},
+        {"t": "note", "kind": "warn", "text": "This is a risk for the **domain owner** (me), not for someone querying it. HTTPS mitigates it partially — TLS certs are validated against the CA store, not DNS — but DNS-level interception before the handshake is still a real attack surface. Something to fix on my own domain."}
+      ]
+    },
+    {
+      "h": "Comparing radblok.co.za to cnn.com",
+      "blocks": [
+        {"t": "p", "text": "Entry 005's `whois cnn.com` returned two stacked records — VeriSign's redirected to Com Laude, which gave the real data. `whois radblok.co.za` returns one record from ZARC directly, with contact fields replaced by an RDDS referral message. The privacy outcome is the same (go ask the registrar for contacts) but the technical path is different: one lookup vs two."},
+        {"t": "p", "text": "Both show the same underlying structure: a registry (ZARC / VeriSign) delegates registration to accredited registrars (xneelo / Com Laude), and the registrar holds the actual customer contact data."}
+      ]
+    },
+    {
+      "h": "Lab status",
+      "blocks": [
+        {"t": "list", "items": [
+          "whois against a real .co.za domain (my own) — every field understood against ground truth.",
+          "Compared ccTLD (ZARC, direct response) vs gTLD thin WHOIS with registrar referral.",
+          "Org name visible in .co.za even when individual contacts are redacted — ccTLD privacy policies vary.",
+          "Nameservers confirm xneelo as both registrar and DNS/hosting provider.",
+          "DNSSEC unsigned is a real gap to fix on radblok.co.za.",
+          "Next: `dig` to follow up on the actual IP and MX records the domain points to."
+        ]}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "n": 13,
+  "date": "2026-10-01",
+  "module": "Reconnaissance & scanning",
+  "title": "TLS Certificate analysis: Google Trust Services, ECDSA 256, and isolated SAN",
+  "tags": ["recon", "nmap", "ssl-cert", "tls", "gts", "ecdsa", "radblok"],
+  "summary": "Nmap's ssl-cert script inspected the TLS certificate for www.radblok.co.za. The certificate is issued by Google Trust Services (WE1 CA) using modern 256-bit Elliptic Curve Cryptography (ECDSA) with a 90-day automated ACME lifecycle (Sept 20 to Dec 19, 2026). The Subject Alternative Name (SAN) contains only DNS:www.radblok.co.za, indicating isolated single-domain certificate issuance rather than a shared wildcard.",
+  "sections": [
+    {
+      "h": "The ssl-cert scan output",
+      "blocks": [
+        {"t": "code", "label": "kali", "text": "$ nmap -p 443 --script ssl-cert www.radblok.co.za\nPORT    STATE SERVICE\n443/tcp open  https\n| ssl-cert: Subject: commonName=www.radblok.co.za\n| Subject Alternative Name: DNS:www.radblok.co.za\n| Issuer: commonName=WE1/organizationName=Google Trust Services/countryName=US\n| Public Key type: ec\n| Public Key bits: 256\n| Signature Algorithm: ecdsa-with-SHA256\n| Not valid before: 2026-09-20T08:33:33\n| Not valid after:  2026-12-19T09:33:29\n|_SHA-256: 3054 cc83 47fb 3b0f b9e0 969b afb7 2d0d 9317 0e6d 9b3d 24af ddae 7479 8421 37e4"}
+      ]
+    },
+    {
+      "h": "Breaking down the certificate details",
+      "blocks": [
+        {"t": "table", "head": ["Certificate Field", "Observed Value", "Technical & Recon Implication"], "rows": [
+          ["**Issuer**", "`WE1 / Google Trust Services (US)`", "Google Trust Services is an automated ACME Certificate Authority. Cloudflare and Render integrate GTS alongside Let's Encrypt for automatic TLS provisioning."],
+          ["**Public Key & Algorithm**", "`EC 256-bit / ecdsa-with-SHA256`", "Modern Elliptic Curve Cryptography (ECC / prime256v1). ECDSA provides equivalent security to RSA 3072-bit with substantially smaller key sizes, lower CPU overhead, and faster TLS handshakes on mobile devices."],
+          ["**Subject Alternative Name (SAN)**", "`DNS:www.radblok.co.za`", "**No Wildcards or Leaked Staging Subdomains**. The certificate covers strictly `www.radblok.co.za`. It does not include `radblok.co.za` or any internal/dev hostnames in this specific cert, showing targeted per-hostname provisioning."],
+          ["**Validity Window**", "`2026-09-20` to `2026-12-19` (90 days)", "Standard 90-day automated lifecycle. Issued recently on September 20, managed via automated background renewal."],
+          ["**rDNS Association**", "`216.24.57.1` &rarr; `ip-216-24-57-1.ingress.render.com`", "Adds a third ingress IP in the `216.24.57.0/24` subnet alongside the `.16` and `.18` addresses discovered in Entry 011."]
+        ]}
+      ]
+    },
+    {
+      "h": "Why SAN inspection matters in recon",
+      "blocks": [
+        {"t": "p", "text": "In security assessments, inspecting the Subject Alternative Name (SAN) field is a key technique for discovering hidden attack surfaces. Multi-domain certificates or wildcards often bundle related hostnames together, such as `admin.target.com`, `vpn.target.com`, or `dev-backend.target.com`."},
+        {"t": "p", "text": "Here, Render/Cloudflare requested a tightly scoped single-name certificate solely for `www.radblok.co.za`, leaving no ancillary hostnames exposed in the SAN."}
+      ]
+    },
+    {
+      "h": "Lab status & next step",
+      "blocks": [
+        {"t": "list", "items": [
+          "TLS profile completed: ECDSA 256-bit issued by Google Trust Services (WE1).",
+          "SAN contains only `www.radblok.co.za` (clean, tight scope).",
+          "Next logical step: Test how the apex `radblok.co.za` presents its certificate, or inspect HTTP response body content / robots.txt on `www.radblok.co.za`."
+        ]}
+      ]
+    }
+  ]
+}

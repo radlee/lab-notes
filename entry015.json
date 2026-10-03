@@ -1,0 +1,65 @@
+{
+  "n": 15,
+  "date": "2026-10-02",
+  "module": "Reconnaissance & scanning",
+  "title": "Shodan: The search engine for internet-connected devices and banner leaks",
+  "tags": ["shodan", "osint", "recon", "banners", "iot", "default-passwords", "redis"],
+  "summary": "Queried Shodan for 'default password' to analyze how passive internet-wide scanners collect and index device banners. The query surfaced over 18,000 publicly exposed systems globally without transmitting a single packet from the local machine. Breaking down the results revealed how devices inadvertently match (such as Redis protected-mode rejection banners, IoT web servers, and HP printers leaking hardware serial numbers in HTTP headers), illustrating the critical risks of banner information disclosure and unintended WAN exposure.",
+  "sections": [
+    {
+      "h": "Shodan vs Active Scanning (Nmap)",
+      "blocks": [
+        {"t": "p", "text": "In previous labs, Nmap performed **active reconnaissance** by transmitting TCP/UDP packets directly from the Kali VM to target ports. Shodan operates on an entirely different model: **passive reconnaissance via distributed crawlers**."},
+        {"t": "table", "head": ["Dimension", "Nmap Active Scanning", "Shodan Passive Recon"], "rows": [
+          ["**Traffic Generation**", "Sends probes directly from your IP to the target host.", "Zero packets sent to the target; queries Shodan's indexed database."],
+          ["**Detection Risk**", "Easily logged by target firewalls, IDS/IPS, and Cloudflare edge.", "Completely invisible to the target organization."],
+          ["**Scope & Speed**", "Limited to targets and subnets you actively probe in real time.", "Indexes the entire IPv4 address space continuously across thousands of ports."],
+          ["**Data Freshness**", "Live, real-time status at the exact moment of execution.", "Historical snapshot from when Shodan's crawlers last inspected the host."]
+        ]}
+      ]
+    },
+    {
+      "h": "Deconstructing the 'default password' query results",
+      "blocks": [
+        {"t": "p", "text": "Running a broad query like `default password` searches across full raw banners, HTTP headers, error strings, and HTML bodies. The query produced 18,034 results globally, with high concentrations in Telnet (port 23), Redis (port 6379), and HTTP/HTTPS administrative interfaces (ports 80, 443, 8080)."},
+        {"t": "table", "head": ["Exposed Service / Banner", "Why it Matched", "Recon & Security Finding"], "rows": [
+          ["**HP Embedded Web Servers** (`85.139.238.231`, `74.88.244.79`)", "HTTP header banner + setup documentation", "The HTTP `Server` header leaks exact hardware model, serial number (`Serial Number: CN4AL466FM...`), and firmware build date on the public internet."],
+          ["**Redis Database** (`46.62.131.141`, port 6379)", "Error text contains: `...protected mode is enabled and no password is set for the default user...`", "Database exposed directly to WAN. While protected mode prevented unauthorized external commands, database instances should never listen on public interfaces without firewall/VPN isolation."],
+          ["**Synology DSM & IoT Webcams** (`58.253.76.4`)", "Login portal strings & Let's Encrypt certs", "Surfaces network-attached storage and webcams directly accessible from residential/ISP dynamic IP ranges."]
+        ]}
+      ]
+    },
+    {
+      "h": "Banner information disclosure risks",
+      "blocks": [
+        {"t": "p", "text": "A key takeaway from inspecting raw banners is **gratuitous information leakage**. Look at this real header captured by Shodan from an office printer:"},
+        {"t": "code", "label": "banner", "text": "Server: HP HTTP Server; HP ENVY 5530 series - A9J40B; Serial Number: CN4AL466FM067B; Built:Mon Jun 08, 2020 08:12:12AM {ORL1CN2024AR}"},
+        {"t": "p", "text": "In a single HTTP response, an attacker gains: the exact product model, firmware release date (2020), and hardware serial number. This enables targeted searches in vulnerability databases (CVEs) without needing to guess or brute-force software versions."},
+        {"t": "note", "kind": "warn", "text": "**Defensive Rule**: Services should suppress verbose version banners (e.g. `ServerTokens Prod` in Apache, `server_tokens off` in Nginx). Administrative interfaces, printers, and internal databases should be restricted behind VPNs or local subnets rather than assigned public IPv4 addresses."}
+      ]
+    },
+    {
+      "h": "Targeted Shodan search syntax",
+      "blocks": [
+        {"t": "p", "text": "While broad keyword searches return interesting global patterns, precise recon uses structured filters to narrow results to specific targets:"},
+        {"t": "table", "head": ["Syntax", "Targeted Objective", "Practical Use Case"], "rows": [
+          ["`ssl.cert.subject.cn:\"radblok.co.za\"`", "Certificate Common Name", "Hunts for real origin IPs presenting the domain's TLS cert."],
+          ["`ssl:\"radblok.co.za\" -org:\"Cloudflare, Inc.\"`", "Cert search excluding CDN", "Filters out CDN proxies to isolate direct origin servers."],
+          ["`http.html:\"default password\" port:80,443`", "Restricted body search", "Limits matches strictly to HTML body text on web ports."],
+          ["`net:216.24.57.0/24`", "Subnet filter", "Inspects all Shodan-indexed records across an entire IP block."]
+        ]}
+      ]
+    },
+    {
+      "h": "Lab status & summary",
+      "blocks": [
+        {"t": "list", "items": [
+          "Demonstrated how Shodan aggregates passive reconnaissance data across IPv4 without sending direct probes.",
+          "Analyzed 18,000+ exposed nodes, identifying why queries match banner error strings (Redis) and hardware headers (HP printers).",
+          "Documented how verbose server banners eliminate attacker guesswork and accelerate vulnerability mapping.",
+          "Next step: Apply targeted search filters (like `ssl.cert.subject.cn` or `host:`) against specific infrastructure."
+        ]}
+      ]
+    }
+  ]
+}

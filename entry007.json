@@ -1,0 +1,103 @@
+{
+  "n": 7,
+  "date": "2026-10-01",
+  "module": "Reconnaissance & scanning",
+  "title": "DNSSEC unsigned: what it actually means for radblok.co.za",
+  "tags": ["dns", "dnssec", "security", "cache-poisoning", "radblok"],
+  "summary": "The whois record for radblok.co.za showed DNSSEC: unsigned. Dug into what that actually means — how DNS cache poisoning works, what an attacker can do once a resolver is poisoned, why HTTPS only partially saves you, and how DNSSEC closes the gap with a chain of cryptographic signatures from the root down to my zone.",
+  "sections": [
+    {
+      "h": "How DNS normally works (no DNSSEC)",
+      "blocks": [
+        {"t": "p", "text": "When someone types `radblok.co.za` into a browser, their device asks a **recursive resolver** (ISP's, or 8.8.8.8, or 1.1.1.1) to figure out the IP. The resolver does a chain of lookups:"},
+        {"t": "steps", "items": [
+          "Ask a root nameserver → \"ask ZARC for .co.za\"",
+          "Ask ZARC's nameserver → \"ask ns1.host-h.net for radblok.co.za\"",
+          "Ask ns1.host-h.net → \"the IP is X.X.X.X\"",
+          "**Cache that answer for TTL seconds**, serve it to the client — and every other client who asks"
+        ]},
+        {"t": "p", "text": "The critical word is **cache**. The resolver stores that answer and reuses it for every client until the TTL expires. And there is **zero authentication** in this chain. The resolver has no way to verify the answer is genuine. It just trusts whoever responded."}
+      ]
+    },
+    {
+      "h": "DNS cache poisoning — the actual attack (Kaminsky, 2008)",
+      "blocks": [
+        {"t": "p", "text": "The attacker's goal: get a fake answer into the resolver's cache before the real one arrives. DNS runs over UDP — there's no handshake. A response just needs to carry the right transaction ID to be accepted. The resolver can't tell a fake from a real answer if the ID matches."},
+        {"t": "code", "label": "attack flow", "text": "# Attacker sends resolver a flood of fake UDP responses\n# each claiming to be from ns1.host-h.net\n# each with a different transaction ID, racing to match\n\n# If one fake response lands before the real one:\n#   → resolver caches the fake IP for radblok.co.za\n#   → every client asking gets the attacker's server\n#   → lasts until the TTL expires — could be hours"},
+        {"t": "p", "text": "Modern resolvers randomise source ports too (you now have to guess port AND transaction ID), but it's still a probabilistic attack — harder, not impossible. And on a network where the attacker has any MITM position (a rogue AP, a compromised router, a BGP hijack), they don't even need to race — they can just intercept and replace the response directly."}
+      ]
+    },
+    {
+      "h": "What the attacker can do once the cache is poisoned",
+      "blocks": [
+        {"t": "p", "text": "Any client whose resolver has the poisoned cache entry is now talking to the attacker's server instead of mine. What they can do with that:"},
+        {"t": "table", "head": ["Target", "Attack", "Blocked by HTTPS?"], "rows": [
+          ["Web traffic", "Serve a clone site, harvest credentials", "Partially — browser cert warning if attacker has no cert"],
+          ["First HTTP visit", "Intercept before HTTPS upgrade fires", "No — HSTS only helps after the first visit"],
+          ["Email (MX records)", "Poison MX → intercept inbound mail to @radblok.co.za", "No — mail routing has no cert check at the DNS level"],
+          ["New visitors", "No HSTS preload for my domain → first visit is HTTP", "No"],
+          ["CA cert issuance", "Some CAs verify domain control via DNS — poisoned DNS = fraudulent cert", "No — defeats HTTPS entirely"]
+        ]},
+        {"t": "note", "kind": "warn", "text": "The email angle is the most underrated. HTTPS protects web traffic. It does nothing for SMTP routing. A poisoned MX record redirects inbound mail silently — no browser, no warning, no cert check."}
+      ]
+    },
+    {
+      "h": "What DNSSEC actually does",
+      "blocks": [
+        {"t": "p", "text": "DNSSEC adds **cryptographic signatures** to every DNS record in the zone. xneelo would sign them with a private key held in the zone:"},
+        {"t": "code", "label": "signed zone (simplified)", "text": "radblok.co.za  A      X.X.X.X\nradblok.co.za  RRSIG  (signature over the A record, signed with zone key)\nradblok.co.za  MX     mail.radblok.co.za\nradblok.co.za  RRSIG  (signature over the MX record)"},
+        {"t": "p", "text": "ZARC signs a **DS record** (a hash of my zone's public key) and publishes it in the .co.za zone. The root signs ZARC's key. This creates a **chain of trust**:"},
+        {"t": "code", "label": "chain of trust", "text": "Root (.) → signs ZARC's key\n  ZARC (.co.za) → signs my zone key\n    My zone (radblok.co.za) → signs every record"},
+        {"t": "p", "text": "A DNSSEC-validating resolver checks the whole chain when it gets an answer. If a poisoned or fake answer arrives, **the signature won't verify** — the resolver rejects it and returns `SERVFAIL` instead of serving the bad data. The attack is blocked at the resolver level, before it ever reaches the client."}
+      ]
+    },
+    {
+      "h": "Unsigned vs signed: the concrete difference",
+      "blocks": [
+        {"t": "table", "head": ["Scenario", "DNSSEC unsigned (now)", "DNSSEC signed (fixed)"], "rows": [
+          ["Attacker poisons 8.8.8.8 cache", "8.8.8.8 has no signature to check → caches fake answer → serves it to everyone", "8.8.8.8 checks signature → mismatch → SERVFAIL → attack blocked"],
+          ["Attacker intercepts MX record", "Mail routing silently redirects to attacker", "Signature check fails → resolver refuses the fake MX"],
+          ["CA issues fraudulent cert", "Nothing at DNS level stops it", "CAA record (also signed) restricts which CAs can issue → misissuance blocked"]
+        ]}
+      ]
+    },
+    {
+      "h": "Why HTTPS only partially saves you",
+      "blocks": [
+        {"t": "list", "items": [
+          "**HTTP-first traffic** — any redirect from HTTP to HTTPS hits the attacker's server before the upgrade fires. On that first request, you're already exposed.",
+          "**No HSTS preload** — HSTS (the header that forces HTTPS on future visits) only kicks in after the first successful HTTPS visit. A brand-new visitor to `radblok.co.za` has no preload. First visit with a poisoned resolver = attacker's server, no warning.",
+          "**Email (MX)** — HTTPS protects web traffic. SMTP routing is DNS-based with no equivalent cert check. A poisoned MX record redirects inbound mail silently.",
+          "**CA misissuance** — CAs sometimes verify domain ownership via DNS or HTTP challenge. Poisoned DNS can make a CA think the attacker controls the domain, resulting in a legitimate cert for the attacker. HTTPS then shows a green padlock on a malicious site."
+        ]}
+      ]
+    },
+    {
+      "h": "How to fix it on radblok.co.za",
+      "blocks": [
+        {"t": "steps", "items": [
+          "Log in to xneelo's control panel.",
+          "Find the DNS/DNSSEC section for `radblok.co.za`.",
+          "Enable DNSSEC — xneelo generates the zone signing key (ZSK) and key signing key (KSK), signs all records.",
+          "xneelo submits the **DS record** (hash of your KSK) up to ZARC.",
+          "ZARC publishes the DS record in the `.co.za` zone — chain of trust is complete."
+        ]},
+        {"t": "code", "label": "kali — verify after enabling", "text": "# Check for RRSIG records (signatures on your A record)\n$ dig radblok.co.za A +dnssec\n# Should see RRSIG records next to the A record\n# and 'ad' flag (authenticated data) in the response header\n\n# Check the DS record at ZARC level\n$ dig radblok.co.za DS +trace"},
+        {"t": "note", "kind": "tip", "text": "Takes 5 minutes to enable in the control panel, up to 48 hours to propagate through the DNS hierarchy. Cost: free. While you're there, also add a **CAA record** — it tells CAs that only xneelo is authorised to issue TLS certs for radblok.co.za, closing the misissuance angle too."}
+      ]
+    },
+    {
+      "h": "Lab status",
+      "blocks": [
+        {"t": "list", "items": [
+          "Understood DNS cache poisoning — the Kaminsky attack and why unsigned zones are vulnerable.",
+          "Mapped out exactly what an attacker can do with a poisoned cache: web cloning, mail interception, fraudulent cert issuance.",
+          "Understood why HTTPS only partially mitigates: HTTP-first traffic, no HSTS preload for new visitors, MX records unprotected.",
+          "DNSSEC fix: chain of trust from root → ZARC → zone key → signed records. Resolver rejects anything with a missing or bad signature.",
+          "**Action item:** enable DNSSEC on radblok.co.za via xneelo control panel. Also add a CAA record.",
+          "Next: `dig` the actual A and MX records to see what radblok.co.za currently resolves to."
+        ]}
+      ]
+    }
+  ]
+}

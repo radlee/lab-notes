@@ -1,0 +1,80 @@
+{
+  "n": 11,
+  "date": "2026-10-01",
+  "module": "Reconnaissance & scanning",
+  "title": "Chasing the origin: Render runs on GCP, Cloudflare is infrastructure",
+  "tags": ["nmap", "dig", "recon", "cloudflare", "render", "gcp", "cname", "radblok"],
+  "summary": "Checked radblok.onrender.com to try to find the real origin IP behind Cloudflare. The CNAME chain revealed Render runs on Google Cloud Platform (GCP US West 1) and routes all traffic through Cloudflare at the infrastructure level — it's not per-customer configuration, it's Render's own setup. There is no public path around Cloudflare to the real application server.",
+  "sections": [
+    {
+      "h": "The full CNAME chain",
+      "blocks": [
+        {"t": "code", "label": "kali", "text": "$ dig radblok.onrender.com A +short\ngcp-us-west1-1.origin.onrender.com.\ngcp-us-west1-1.origin.onrender.com.cdn.cloudflare.net.\n216.24.57.18\n216.24.57.16"},
+        {"t": "p", "text": "`dig` is showing the full resolution chain, not just the final answer. Reading top to bottom:"},
+        {"t": "table", "head": ["Step", "Record", "What it means"], "rows": [
+          ["1", "`radblok.onrender.com` → CNAME → `gcp-us-west1-1.origin.onrender.com`", "Render maps the app subdomain to a regional origin cluster"],
+          ["2", "`gcp-us-west1-1.origin.onrender.com` → CNAME → `…cdn.cloudflare.net`", "That origin cluster is itself behind Cloudflare's CDN — Render's own infrastructure layer"],
+          ["3", "`…cdn.cloudflare.net` → A → `216.24.57.18`, `216.24.57.16`", "Two IPs — load balancing across multiple Cloudflare/Render ingress nodes"]
+        ]},
+        {"t": "p", "text": "The CNAME chain is the most information-dense part of this whole investigation. One `dig` command reveals the entire stack: Render → GCP → Cloudflare → two IPs."}
+      ]
+    },
+    {
+      "h": "GCP US West 1 — the underlying platform",
+      "blocks": [
+        {"t": "p", "text": "`gcp-us-west1-1` is not decoration — it's a real infrastructure label. Breaking it down:"},
+        {"t": "table", "head": ["Part", "Meaning"], "rows": [
+          ["`gcp`", "Google Cloud Platform — Render's underlying compute provider"],
+          ["`us-west1`", "GCP's US West 1 region — Oregon, USA"],
+          ["`1`", "Cluster or node number within that region"]
+        ]},
+        {"t": "p", "text": "So the stack is: **app → Render (managed PaaS) → GCP US West 1 (underlying VMs) → Cloudflare (CDN/proxy)**. Three layers of infrastructure, all surfaced by reading the CNAME chain."}
+      ]
+    },
+    {
+      "h": "Cloudflare is Render's infrastructure, not the app owner's choice",
+      "blocks": [
+        {"t": "p", "text": "The `.cdn.cloudflare.net` CNAME is on `gcp-us-west1-1.origin.onrender.com` — a Render-controlled hostname. This is Render's own DNS record, not something configured per customer. Every application hosted on Render goes through Cloudflare whether the app owner set it up or not."},
+        {"t": "p", "text": "This means **there is no public path around Cloudflare** to the real application origin. The nmap on `216.24.57.16` still shows `Cloudflare http proxy` — even the 'origin' subdomain terminates at Cloudflare's edge, not at the actual GCP VM running the app. The real backend only receives traffic forwarded by Cloudflare internally."},
+        {"t": "note", "kind": "tip", "text": "In a real pentest against a Cloudflare-protected target, the main technique for finding the origin is: look for old DNS records before Cloudflare was added (SecurityTrails, historical whois), check SSL cert SANs for alternative hostnames, scan adjacent IPs in the same /24 for the same TLS cert, and look for direct cloud provider subdomains (like `*.onrender.com`). In this case — the onrender.com subdomain still terminates at Cloudflare, so even that didn't help."}
+      ]
+    },
+    {
+      "h": "Two IPs — load balancing",
+      "blocks": [
+        {"t": "code", "label": "kali", "text": "$ dig -x 216.24.57.18 +short\nip-216-24-57-18.ingress.render.com.\n\n$ dig -x 216.24.57.16 +short\nip-216-24-57-16.ingress.render.com."},
+        {"t": "p", "text": "Two IPs in the same `/24` subnet (`216.24.57.0/24`), both naming themselves `ingress.render.com`. DNS returning multiple A records is standard load balancing — clients pick one (usually the first), and if it fails, try the other. Different clients may get the IPs in different order."},
+        {"t": "p", "text": "The first `dig -x` also hit a **DNS timeout from `10.28.119.151`** before resolving. That IP is the Honor X8 hotspot's DNS server (the gateway it hands out via DHCP). The hotspot's DNS is occasionally slow or flaky — the query eventually succeeded through a retry or fallback. Not a concern, but worth knowing: `10.28.119.151` is your lab's current upstream DNS resolver."}
+      ]
+    },
+    {
+      "h": "Complete picture: what we now know about radblok.co.za",
+      "blocks": [
+        {"t": "table", "head": ["Layer", "Provider", "Detail", "Found via"], "rows": [
+          ["Domain registration", "xneelo", "Origin2020 / ZA", "whois"],
+          ["DNS management", "xneelo / host-h.net", "ns1/ns2.host-h.net + dns-h.com", "whois"],
+          ["CDN / proxy", "Cloudflare", "Baked into Render's infra — not optional", "nmap banner + CNAME chain"],
+          ["App hosting", "Render.com", "GCP US West 1, ingress cluster `gcp-us-west1-1`", "dig CNAME chain"],
+          ["Underlying cloud", "Google Cloud Platform", "US West 1 region (Oregon)", "CNAME label"],
+          ["Mail (inbound)", "Nobody — SMTP filtered", "MX points here but no SMTP daemon", "nmap port scan"],
+          ["True origin IP", "Unknown — hidden", "Behind Cloudflare's internal network", "Not reachable"]
+        ]},
+        {"t": "p", "text": "This took seven separate tools and techniques across four lab sessions to build: whois → theHarvester → dig MX → dig A → dig -x → nmap -sV → dig CNAME chain. No single tool would have shown all of it."}
+      ]
+    },
+    {
+      "h": "Lab status",
+      "blocks": [
+        {"t": "list", "items": [
+          "CNAME chain from `radblok.onrender.com` revealed full stack: Render → GCP US West 1 → Cloudflare.",
+          "Cloudflare is Render's own infrastructure — every Render app uses it, not per-customer config.",
+          "No public path to the true origin IP. Cloudflare intercepts all traffic at the edge.",
+          "Two load-balanced IPs: `216.24.57.16` and `216.24.57.18`, both `ingress.render.com`.",
+          "Hotspot DNS (`10.28.119.151`) timed out once on a PTR lookup — minor, expected on a mobile hotspot.",
+          "**MX record is still broken** — action item remains: fix or remove it.",
+          "Recon of radblok.co.za is complete at the passive/light-active level. Next topic or move to a deliberately vulnerable target (DVWA/Metasploitable) for active scanning practice."
+        ]}
+      ]
+    }
+  ]
+}

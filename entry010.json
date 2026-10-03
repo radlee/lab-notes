@@ -1,0 +1,78 @@
+{
+  "n": 10,
+  "date": "2026-10-01",
+  "module": "Reconnaissance & scanning",
+  "title": "nmap scan: Cloudflare in front, mail ports all filtered",
+  "tags": ["nmap", "recon", "cloudflare", "render", "smtp", "radblok"],
+  "summary": "nmap -sV against 216.24.57.1 showed HTTP/HTTPS open with Cloudflare as the proxy layer, and all three mail ports (25, 465, 587) filtered by a firewall. Cloudflare was not visible anywhere in whois or dig — it only appeared when we actually knocked on the ports. The MX record pointing here is essentially non-functional for real SMTP delivery.",
+  "sections": [
+    {
+      "h": "The scan",
+      "blocks": [
+        {"t": "code", "label": "kali", "text": "$ nmap -sV -p 25,80,443,465,587 216.24.57.1\n\nPORT    STATE    SERVICE    VERSION\n25/tcp  filtered smtp\n80/tcp  open     http       Cloudflare http proxy\n443/tcp open     ssl/https  cloudflare\n465/tcp filtered smtps\n587/tcp filtered submission"}
+      ]
+    },
+    {
+      "h": "Reading the port states",
+      "blocks": [
+        {"t": "table", "head": ["State", "What it means"], "rows": [
+          ["`open`", "Something is listening and responding — a real service is there"],
+          ["`filtered`", "A firewall is silently dropping packets — can't tell if a service exists behind it"],
+          ["`closed`", "Port is reachable but nothing is listening"]
+        ]},
+        {"t": "p", "text": "All three mail ports are `filtered` — not `closed`. A closed port means the OS replied 'nothing here'. Filtered means the firewall dropped the probe entirely. There is an active firewall in front of this IP blocking SMTP traffic, and it's not telling us anything about what's behind it."}
+      ]
+    },
+    {
+      "h": "Cloudflare — the hidden layer",
+      "blocks": [
+        {"t": "p", "text": "Ports 80 and 443 show **`Cloudflare http proxy`** and **`cloudflare`** as the service. Cloudflare was in none of the earlier data — not in whois, not in the dig A record, not in theHarvester results. It only appeared when nmap sent actual HTTP probes and read the response headers."},
+        {"t": "p", "text": "This means Cloudflare is sitting as a **reverse proxy** in front of the application. Traffic hitting `216.24.57.1` on web ports is answered by Cloudflare's edge network, which then proxies legitimate requests through to the Render backend. Render itself uses Cloudflare at its ingress layer for all customers — or the app owner configured Cloudflare specifically."},
+        {"t": "note", "kind": "warn", "text": "This is a major recon implication: **`216.24.57.1` is not the true origin IP of the application.** Cloudflare sits in between. The real backend IP is hidden behind Cloudflare's network. Any scan you do is hitting Cloudflare's edge, not the application server directly. To find the real origin you'd need to look for misconfigured DNS records, old A records, SSL cert SANs, or direct Render subdomains that bypass Cloudflare."}
+      ]
+    },
+    {
+      "h": "Mail ports all filtered: the MX record is broken",
+      "blocks": [
+        {"t": "p", "text": "Entry 009 flagged that the MX record pointing to a Render IP was unusual. This scan confirms why: **ports 25, 465, and 587 are all filtered.** No mail daemon is accepting connections here."},
+        {"t": "p", "text": "When another mail server tries to deliver email to `@radblok.co.za`, it looks up the MX record, finds `mail.radblok.co.za`, resolves it to `216.24.57.1`, then tries to connect on port 25 — and gets silently dropped by the firewall. **Inbound SMTP delivery to this domain is currently broken.** Any email sent to `@radblok.co.za` will time out and bounce."},
+        {"t": "note", "kind": "warn", "text": "This is an action item for the domain owner (me): either point the MX record at a real mail service (Zoho Mail, Google Workspace, or a transactional provider like Mailgun/SendGrid that provides SMTP receive), or remove the MX record entirely if email isn't needed. A dangling MX pointing at a Cloudflare/Render node that blocks SMTP just means all inbound mail bounces silently."}
+      ]
+    },
+    {
+      "h": "The full architecture — updated",
+      "blocks": [
+        {"t": "table", "head": ["Layer", "Provider", "Visible in"], "rows": [
+          ["Domain registration", "xneelo (Pty) Ltd", "whois"],
+          ["DNS management", "xneelo / host-h.net nameservers", "whois"],
+          ["CDN / reverse proxy", "**Cloudflare**", "nmap service detection only"],
+          ["Application hosting", "**Render.com**", "reverse DNS (`dig -x`)"],
+          ["Mail (inbound SMTP)", "**Nobody** — all ports filtered", "nmap port scan"]
+        ]},
+        {"t": "p", "text": "Three completely separate providers — and the only way to see all of them was to combine whois, dig, theHarvester, dig -x, and nmap. No single tool showed the full picture."}
+      ]
+    },
+    {
+      "h": "What `-sV` actually does",
+      "blocks": [
+        {"t": "p", "text": "`-sV` tells nmap to do **service/version detection** — after finding an open port, it sends probes and reads banners to identify what software is listening. Without `-sV`, nmap would just report port 80 as `open http` from the port number alone. With it, nmap saw `Cloudflare http proxy` in the response — which completely changes the picture."},
+        {"t": "code", "label": "comparison", "text": "# Without -sV: port number tells you the protocol\nnmap -p 80 216.24.57.1\n# → 80/tcp open http\n\n# With -sV: probe reads the actual banner\nnmap -sV -p 80 216.24.57.1\n# → 80/tcp open http Cloudflare http proxy"},
+        {"t": "note", "kind": "tip", "text": "`-sV` makes scans slower (it has to send extra probes and wait for responses) but gives dramatically more useful output. Always use it when you actually want to know what's running, not just whether a port is open."}
+      ]
+    },
+    {
+      "h": "Lab status",
+      "blocks": [
+        {"t": "list", "items": [
+          "nmap confirmed: Cloudflare is the proxy layer — not visible in whois or dig, only in service banners.",
+          "`216.24.57.1` is Cloudflare/Render ingress — **not the true origin IP** of the application.",
+          "All mail ports filtered — inbound SMTP to `@radblok.co.za` currently bounces. The MX record is broken.",
+          "Full stack: xneelo (DNS) → Cloudflare (proxy) → Render (app). Three separate providers.",
+          "Understood `-sV`: service detection reads banners, not just port numbers — always worth using.",
+          "**Action item on domain**: fix or remove the MX record. Either point to a real mail provider or delete it.",
+          "Next recon step: look for Render's direct subdomain for the app (e.g. `radblok.onrender.com`) — that would bypass Cloudflare and expose the real origin."
+        ]}
+      ]
+    }
+  ]
+}
