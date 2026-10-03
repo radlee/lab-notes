@@ -1,9 +1,9 @@
 # Lab Session State & Checkpoint
 
-**Last Updated**: October 3, 2026, 20:00 SAST  
+**Last Updated**: October 3, 2026, 21:35 SAST  
 **Author / Lab User**: `general@lee` (Kali Linux) / `radlee`  
 **GitHub Repository**: [`https://github.com/radlee/lab-notes.git`](https://github.com/radlee/lab-notes.git)  
-**Current Phase**: Active Target Reconnaissance, Exploitation & Lab Infrastructure Expansion
+**Current Phase**: Termux Mobile Access Established, Target Verification & Kali SSH Setup
 
 ---
 
@@ -13,7 +13,7 @@ If you are continuing this lab from **Termux on Android**:
 
 ### A. Clone / Pull Latest Notes & States
 ```bash
-pkg update && pkg install git curl jq netcat-openbsd nmap openssh -y
+pkg update && pkg install git gh curl jq netcat-openbsd nmap openssh -y
 git clone https://github.com/radlee/lab-notes.git
 cd lab-notes
 git pull
@@ -24,11 +24,12 @@ Because the VMs are bridged directly to your home Wi-Fi network, your Android de
 
 | Machine / Target | IP Address | MAC / Identifier | Role & Status |
 | :--- | :--- | :--- | :--- |
+| **Android Termux** | `192.168.0.193` | `wlan0` | **Mobile Controller** (Active, tools installed: `gh`, `nmap`, `nc`, `jq`) |
 | **Metasploitable 2** | `192.168.0.155` | `08:00:27:1d:80:01` | **Vulnerable Linux Target** (Active, Bridged, Running) |
-| **Kali Linux** | `192.168.0.149` | `eth0` | **Attack Box** (Active, Bridged, Running) |
+| **Kali Linux** | `192.168.0.149` | `eth0` | **Attack Box** (Online; SSH port 22 closed, pending `systemctl enable --now ssh`) |
 | **Windows 11 Host** | `192.168.0.125` | Wi-Fi Host Adapter | VirtualBox Hypervisor host |
 | **CentOS Stream 9** | Assigned via DHCP | Anaconda Installer | Target VM 2 (Installation Summary active) |
-| **radblok API** | `https://radblok-api.onrender.com` | Public Cloud API | Live Express / MongoDB REST backend |
+| **radblok API** | `https://radblok-api.onrender.com` | Public Cloud API | Live Express / MongoDB REST backend (Verified UP) |
 | **radblok Frontend** | `radblok.co.za` | Cloudflare CPT PoP | Pending domain renewal / PaaS reactivation |
 
 ---
@@ -113,6 +114,7 @@ The live production backend was mapped and verified from Kali:
 ---
 
 ## 6. Next Steps Checklist
+- [ ] **Resume Action**: Start SSH on Kali Linux (`sudo systemctl enable --now ssh` on `192.168.0.149`), then connect via `ssh general@192.168.0.149`.
 - [ ] Complete CentOS Stream 9 Anaconda installation (Storage partition -> Root password -> Create user -> Reboot).
 - [ ] Conduct comprehensive service scan against CentOS Stream 9 once booted.
 - [ ] Test API authenticated routes on `radblok-api.onrender.com` (POST / login / JWT tokens).
