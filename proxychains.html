@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProxyChains — Multi-Hop Pivoting & Traffic Routing Architecture</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+
+<style>
+:root {
+  --bg: #090b10;
+  --surface: #111520;
+  --surface2: #181f30;
+  --border: #222b42;
+  --text: #d6dbe8;
+  --muted: #7b859e;
+  --heading: #f0f4fc;
+
+  --accent: #3b82f6;
+  --accent-soft: rgba(59, 130, 246, 0.12);
+  --accent-border: rgba(59, 130, 246, 0.35);
+
+  --proxy1: #10b981;
+  --proxy1-soft: rgba(16, 185, 129, 0.12);
+  --proxy1-border: rgba(16, 185, 129, 0.35);
+
+  --proxy2: #f59e0b;
+  --proxy2-soft: rgba(245, 158, 11, 0.12);
+  --proxy2-border: rgba(245, 158, 11, 0.35);
+
+  --proxy3: #ec4899;
+  --proxy3-soft: rgba(236, 72, 153, 0.12);
+  --proxy3-border: rgba(236, 72, 153, 0.35);
+
+  --target: #8b5cf6;
+  --target-soft: rgba(139, 92, 246, 0.12);
+  --target-border: rgba(139, 92, 246, 0.35);
+
+  --warn: #ef4444;
+  --warn-soft: rgba(239, 68, 68, 0.12);
+  --warn-border: rgba(239, 68, 68, 0.35);
+
+  --serif: "DM Serif Display", Georgia, serif;
+  --sans: "DM Sans", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.7;
+  margin: 0;
+  padding: 0 16px 80px;
+}
+
+.wrap {
+  max-width: 840px;
+  margin: 0 auto;
+}
+
+/* Header */
+.cover {
+  padding: 56px 0 36px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 40px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+  margin-bottom: 14px;
+}
+
+h1 {
+  font-family: var(--serif);
+  font-size: clamp(2rem, 5vw, 2.75rem);
+  color: var(--heading);
+  line-height: 1.2;
+  margin: 0 0 12px;
+}
+
+.lead {
+  font-size: 18px;
+  color: var(--muted);
+  max-width: 650px;
+  margin: 0;
+}
+
+/* Interactive Diagram Canvas */
+.diagram-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 24px;
+  margin: 32px 0;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+}
+
+.diagram-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.diagram-title {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--heading);
+}
+
+.mode-pills {
+  display: flex;
+  gap: 8px;
+}
+
+.pill-btn {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pill-btn.active, .pill-btn:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+
+/* Chain Visual Grid */
+.chain-flow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  align-items: center;
+  position: relative;
+  margin-bottom: 24px;
+}
+
+.node {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 12px;
+  text-align: center;
+  position: relative;
+  transition: transform 0.2s, border-color 0.2s;
+}
+
+.node:hover {
+  transform: translateY(-2px);
+}
+
+.node-role {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.node-name {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--heading);
+  margin-bottom: 6px;
+}
+
+.node-spec {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+/* Specific Node Themes */
+.node.attacker { border-color: var(--accent-border); background: var(--accent-soft); }
+.node.attacker .node-spec { color: var(--accent); background: rgba(59,130,246,0.2); }
+
+.node.hop1 { border-color: var(--proxy1-border); background: var(--proxy1-soft); }
+.node.hop1 .node-spec { color: var(--proxy1); background: rgba(16,185,129,0.2); }
+
+.node.hop2 { border-color: var(--proxy2-border); background: var(--proxy2-soft); }
+.node.hop2 .node-spec { color: var(--proxy2); background: rgba(245,158,11,0.2); }
+
+.node.hop3 { border-color: var(--proxy3-border); background: var(--proxy3-soft); }
+.node.hop3 .node-spec { color: var(--proxy3); background: rgba(236,72,153,0.2); }
+
+.node.target { border-color: var(--target-border); background: var(--target-soft); }
+.node.target .node-spec { color: var(--target); background: rgba(139,92,246,0.2); }
+
+/* Live Packet Path Indicator */
+.path-info {
+  background: #0d1117;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: #7ee787;
+  overflow-x: auto;
+}
+
+/* Section styling */
+h2 {
+  font-family: var(--serif);
+  font-size: 1.6rem;
+  color: var(--heading);
+  margin: 48px 0 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+h3 {
+  font-size: 1.15rem;
+  color: var(--heading);
+  margin: 24px 0 10px;
+}
+
+p, li {
+  color: var(--text);
+}
+
+/* Code block */
+pre {
+  background: #0d1117;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  color: #e6edf3;
+}
+
+code {
+  font-family: var(--mono);
+  font-size: 13px;
+  background: var(--surface2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #93c5fd;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  margin: 20px 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+th, td {
+  padding: 10px 14px;
+  text-align: left;
+  border: 1px solid var(--border);
+}
+
+th {
+  background: var(--surface2);
+  color: var(--heading);
+  font-family: var(--mono);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+/* Alert Boxes */
+.alert {
+  padding: 16px;
+  border-radius: 8px;
+  margin: 20px 0;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.alert.warn {
+  background: var(--warn-soft);
+  border: 1px solid var(--warn-border);
+  color: #fca5a5;
+}
+
+.alert.tip {
+  background: var(--proxy1-soft);
+  border: 1px solid var(--proxy1-border);
+  color: #6ee7b7;
+}
+
+.nav-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+  font-family: var(--mono);
+  margin-bottom: 24px;
+}
+
+.nav-back:hover {
+  color: var(--accent);
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <a href="./" class="nav-back">← Back to Lab Notes</a>
+
+  <header class="cover">
+    <span class="tag">Network Pivoting & OPSEC</span>
+    <h1>ProxyChains Architecture & Traffic Routing</h1>
+    <p class="lead">How ProxyChains intercepts dynamic C-library socket calls via <code>LD_PRELOAD</code> to route TCP streams through arbitrary multi-hop SOCKS4, SOCKS5, and HTTP proxy tunnels.</p>
+  </header>
+
+  <!-- Interactive Diagram -->
+  <div class="diagram-card">
+    <div class="diagram-header">
+      <span class="diagram-title">◈ MULTI-HOP TUNNEL VISUALIZER</span>
+      <div class="mode-pills">
+        <button class="pill-btn active" onclick="setMode('dynamic')">Dynamic Chain</button>
+        <button class="pill-btn" onclick="setMode('strict')">Strict Chain</button>
+        <button class="pill-btn" onclick="setMode('random')">Random Chain</button>
+      </div>
+    </div>
+
+    <div class="chain-flow" id="chainGrid">
+      <div class="node attacker">
+        <div class="node-role">Source</div>
+        <div class="node-name">Kali / Termux</div>
+        <span class="node-spec">192.168.0.149</span>
+      </div>
+
+      <div class="node hop1" id="hop1Node">
+        <div class="node-role">Hop 1 (SOCKS5)</div>
+        <div class="node-name">SSH Pivot</div>
+        <span class="node-spec">127.0.0.1:1080</span>
+      </div>
+
+      <div class="node hop2" id="hop2Node">
+        <div class="node-role">Hop 2 (SOCKS4)</div>
+        <div class="node-name">CentOS / Target</div>
+        <span class="node-spec">192.168.0.117:1080</span>
+      </div>
+
+      <div class="node hop3" id="hop3Node">
+        <div class="node-role">Hop 3 (SOCKS5)</div>
+        <div class="node-name">Tor / Edge Node</div>
+        <span class="node-spec">127.0.0.1:9050</span>
+      </div>
+
+      <div class="node target">
+        <div class="node-role">Destination</div>
+        <div class="node-name">Internal Target</div>
+        <span class="node-spec">10.0.2.15:80</span>
+      </div>
+    </div>
+
+    <div class="path-info" id="pathDesc">
+      [Dynamic Mode]: Traffic flows in sequence: Kali ➔ Hop 1 ➔ Hop 2 ➔ Hop 3 ➔ Target. If any intermediary proxy drops, ProxyChains skips it automatically and continues down the list!
+    </div>
+  </div>
+
+  <h2>1. How ProxyChains Works Under the Hood</h2>
+  <p>Unlike VPNs or network interfaces (like WireGuard or `tun/tap`), <strong>ProxyChains operates strictly in user space</strong>. It does not create a virtual network card or alter OS routing tables.</p>
+  
+  <p>Instead, ProxyChains uses the dynamic linker trick: <strong><code>LD_PRELOAD=libproxychains4.so</code></strong>.</p>
+
+  <pre><code># When you execute:
+proxychains4 nmap -sT -Pn -p 80,443 10.0.2.15
+
+# What the OS actually does:
+1. Dynamic linker preloads libproxychains4.so BEFORE standard libc.so.6.
+2. Hooked C syscalls intercepted:
+   - connect()
+   - gethostbyname()
+   - getaddrinfo()
+   - close()
+3. The real connect() to destination is cancelled.
+4. Instead, a TCP connection is opened to the first proxy in the list.
+5. SOCKS handshake is performed, commanding the proxy: "Tunnel me to the next hop".</code></pre>
+
+  <h2>2. The Three Chaining Modes</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Mode</th>
+          <th>Behavior</th>
+          <th>Resilience</th>
+          <th>Best Used For</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>dynamic_chain</code></td>
+          <td>Traverses proxies in order. If a dead proxy is hit, it skips it and connects through the next alive proxy.</td>
+          <td>High (Tolerates downed nodes)</td>
+          <td>Standard penetration testing, pivoting through dynamic SSH tunnels.</td>
+        </tr>
+        <tr>
+          <td><code>strict_chain</code></td>
+          <td>Traverses proxies in exact strict order. If a single proxy is dead, the entire connection fails immediately.</td>
+          <td>Fragile (Strict order)</td>
+          <td>High-security OPSEC where proxy sequence MUST follow exact geolocation hops.</td>
+        </tr>
+        <tr>
+          <td><code>random_chain</code></td>
+          <td>Randomly selects a subset of proxies from the pool every time a connection is opened.</td>
+          <td>Medium</td>
+          <td>Evading rate limits, anti-scraping, and IDS correlation attacks.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>3. The DNS Leak Danger (<code>proxy_dns</code>)</h2>
+  <div class="alert warn">
+    <div>
+      <strong>CRITICAL OPSEC WARNING:</strong> If <code>proxy_dns</code> is commented out or disabled in <code>/etc/proxychains4.conf</code>, your operating system will send DNS lookup requests for target hostnames directly to your local router's DNS server (UDP 53) in plaintext!
+    </div>
+  </div>
+
+  <p>When <strong><code>proxy_dns</code></strong> is enabled:</p>
+  <ul>
+    <li>ProxyChains intercepts <code>getaddrinfo()</code> and <code>gethostbyname()</code>.</li>
+    <li>It returns a fake synthetic IP (e.g. <code>4.2.2.x</code>) to the local application.</li>
+    <li>The actual domain name is encapsulated inside the SOCKS5 request payload and resolved remotely by the exit proxy!</li>
+  </ul>
+
+  <h2>4. Why SYN Scans (<code>-sS</code>) Fail in ProxyChains</h2>
+  <div class="alert tip">
+    <div>
+      <strong>NMAP RULE:</strong> Always use <code>-sT -Pn</code> with ProxyChains.
+    </div>
+  </div>
+  <p>ProxyChains can only hook standard user-space POSIX socket functions (<code>connect()</code>). Tools like <code>nmap -sS</code> construct <strong>raw Layer-3 IP packets</strong> using <code>AF_INET / SOCK_RAW</code>, bypassing libc socket wrappers completely. Therefore, raw SYN scans bypass the proxy chain and leak your real IP address directly.</p>
+
+  <h2>5. Real-World Lab Pivoting Scenario</h2>
+  <pre><code># 1. Create a dynamic SOCKS5 proxy via SSH through your Kali or Windows host:
+ssh -D 1080 -N -f general@192.168.0.149
+
+# 2. Configure /etc/proxychains4.conf:
+[ProxyList]
+socks5  127.0.0.1 1080
+
+# 3. Now run any tool directly into internal subnets:
+proxychains4 curl http://192.168.0.117:9090
+proxychains4 nmap -sT -Pn -p 22,80,445 192.168.0.155</code></pre>
+</div>
+
+<script>
+function setMode(mode) {
+  const buttons = document.querySelectorAll('.pill-btn');
+  buttons.forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+
+  const hop2 = document.getElementById('hop2Node');
+  const pathDesc = document.getElementById('pathDesc');
+
+  if (mode === 'dynamic') {
+    hop2.style.opacity = '1';
+    hop2.style.borderColor = 'var(--proxy2-border)';
+    pathDesc.innerHTML = '<strong>[Dynamic Mode]:</strong> Traffic flows in sequence: Kali ➔ Hop 1 ➔ Hop 2 ➔ Hop 3 ➔ Target. If any intermediary proxy drops, ProxyChains skips it automatically and continues down the list!';
+  } else if (mode === 'strict') {
+    hop2.style.opacity = '1';
+    hop2.style.borderColor = 'var(--proxy2-border)';
+    pathDesc.innerHTML = '<strong>[Strict Mode]:</strong> Every single proxy must be alive and traversed in exact sequence. If Hop 2 goes down, the entire connection is terminated to preserve strict chain policy.';
+  } else if (mode === 'random') {
+    hop2.style.opacity = '0.4';
+    pathDesc.innerHTML = '<strong>[Random Mode]:</strong> ProxyChains randomly picks a variable length sequence from your proxy pool for every request, making traffic analysis and signature matching much harder.';
+  }
+}
+</script>
+
+</body>
+</html>
