@@ -1,9 +1,9 @@
 # Lab Session State & Checkpoint
 
-**Last Updated**: October 3, 2026, 22:15 SAST  
+**Last Updated**: October 4, 2026, 08:30 SAST  
 **Author / Lab User**: `general@lee` (Kali Linux) / `radlee`  
 **GitHub Repository**: [`https://github.com/radlee/lab-notes.git`](https://github.com/radlee/lab-notes.git)  
-**Current Phase**: Termux Mobile Access Established, Target Verification & Full-Stack Audit
+**Current Phase**: Multi-Target Lab Operational (Kali, Metasploitable, CentOS 9, Termux, Cloud)
 
 ---
 
@@ -26,9 +26,9 @@ Because the VMs are bridged directly to your home Wi-Fi network, your Android de
 | :--- | :--- | :--- | :--- |
 | **Android Termux** | `192.168.0.193` | `wlan0` | **Mobile Controller** (Active, tools installed: `gh`, `nmap`, `nc`, `jq`) |
 | **Metasploitable 2** | `192.168.0.155` | `08:00:27:1d:80:01` | **Vulnerable Linux Target** (Active, Bridged, Running) |
-| **Kali Linux** | `192.168.0.149` | `eth0` | **Attack Box** (Online; SSH port 22 closed, pending `systemctl enable --now ssh`) |
+| **Kali Linux** | `192.168.0.149` | `eth0` | **Attack Box** (Online; SSH port 22 verified OPEN) |
 | **Windows 11 Host** | `192.168.0.125` | Wi-Fi Host Adapter | VirtualBox Hypervisor host |
-| **CentOS Stream 9** | Assigned via DHCP | Anaconda Installer | Target VM 2 (Installation Summary active) |
+| **CentOS Stream 9** | `192.168.0.117` | `08:00:27:f9:0e:2d` | **Target VM 2** (Installed, User: `radleecento`, SSH port 22 OPEN) |
 | **radblok API** | `https://radblok-api.onrender.com` | Public Cloud API | **LIVE** Express / MongoDB REST backend (`HTTP 200 OK`) |
 | **radblok Frontend** | `https://radblok.co.za` | Cloudflare CPT PoP | **LIVE & RESTORED** (`HTTP 200 OK`, Render origin) |
 
@@ -131,8 +131,8 @@ python -c 'import pty; pty.spawn("/bin/bash")'
 
 ## 6. Next Steps Checklist
 - [x] Reactivate `radblok.co.za` with registrar (xneelo) and resume Render origin.
-- [ ] **Resume Action**: Start SSH on Kali Linux (`sudo systemctl enable --now ssh` on `192.168.0.149`), then connect via `ssh general@192.168.0.149`.
-- [ ] Complete CentOS Stream 9 Anaconda installation (Storage partition -> Root password -> Create user -> Reboot).
-- [ ] Conduct comprehensive service scan against CentOS Stream 9 once booted.
+- [x] Verify SSH on Kali Linux (`ssh general@192.168.0.149` port 22 verified OPEN).
+- [x] Complete CentOS Stream 9 Anaconda installation (Booted into GNOME, IP: `192.168.0.117`, SSH port 22 OPEN).
+- [ ] Conduct comprehensive service scan against CentOS Stream 9 (`192.168.0.117`) from Kali.
 - [ ] Test API authenticated routes on `radblok-api.onrender.com` (POST / login / JWT tokens).
 - [ ] Test admin authentication & CSRF behavior on `https://radblok.co.za/admin`.
