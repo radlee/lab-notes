@@ -26,7 +26,7 @@ Because the VMs are bridged directly to your home Wi-Fi network, your Android de
 | :--- | :--- | :--- | :--- |
 | **Android Termux** | `192.168.0.193` | `wlan0` | **Mobile Controller** (Active, tools installed: `gh`, `nmap`, `nc`, `jq`) |
 | **Metasploitable 2** | `192.168.0.155` | `08:00:27:1d:80:01` | **Vulnerable Linux Target** (Active, Bridged, Running) |
-| **Kali Linux** | `192.168.0.149` | `eth0` | **Attack Box** (Online; SSH port 22 verified OPEN) |
+| **Kali Linux** | `192.168.0.149` | `eth0` | **Attack Box** (Active, SSH port 22 open, passwordless Ed25519 key auth verified) |
 | **Windows 11 Host** | `192.168.0.125` | Wi-Fi Host Adapter | VirtualBox Hypervisor host |
 | **CentOS Stream 9** | `192.168.0.117` | `08:00:27:f9:0e:2d` | **Target VM 2** (Installed, User: `radleecento`, SSH port 22 OPEN) |
 | **radblok API** | `https://radblok-api.onrender.com` | Public Cloud API | **LIVE** Express / MongoDB REST backend (`HTTP 200 OK`) |
@@ -131,7 +131,7 @@ python -c 'import pty; pty.spawn("/bin/bash")'
 
 ## 6. Next Steps Checklist
 - [x] Reactivate `radblok.co.za` with registrar (xneelo) and resume Render origin.
-- [x] Verify SSH on Kali Linux (`ssh general@192.168.0.149` port 22 verified OPEN).
+- [x] Verify SSH on Kali Linux (`ssh general@192.168.0.149` - passwordless Ed25519 key auth active).
 - [x] Complete CentOS Stream 9 Anaconda installation (Booted into GNOME, IP: `192.168.0.117`, SSH port 22 OPEN).
 - [ ] Conduct comprehensive service scan against CentOS Stream 9 (`192.168.0.117`) from Kali.
 - [ ] Test API authenticated routes on `radblok-api.onrender.com` (POST / login / JWT tokens).
