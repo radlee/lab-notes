@@ -1,9 +1,10 @@
 # Lab Session State & Checkpoint
 
-**Last Updated**: October 4, 2026, 08:30 SAST  
+**Last Updated**: October 4, 2026, 12:15 SAST  
 **Author / Lab User**: `general@lee` (Kali Linux) / `radlee`  
 **GitHub Repository**: [`https://github.com/radlee/lab-notes.git`](https://github.com/radlee/lab-notes.git)  
-**Current Phase**: Multi-Target Lab Operational (Kali, Metasploitable, CentOS 9, Termux, Cloud)
+**Live Interactive Dashboard**: [`https://radlee.github.io/lab-notes/`](https://radlee.github.io/lab-notes/)  
+**Current Phase**: Multi-Target Lab Operational & Public Threat Intel Dashboard Live
 
 ---
 
