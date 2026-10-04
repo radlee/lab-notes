@@ -28,7 +28,7 @@ Because the VMs are bridged directly to your home Wi-Fi network, your Android de
 | **Metasploitable 2** | `192.168.0.155` | `08:00:27:1d:80:01` | **Vulnerable Linux Target** (Active, Bridged, Running) |
 | **Kali Linux** | `192.168.0.149` | `eth0` | **Attack Box** (Active, SSH port 22 open, passwordless Ed25519 key auth verified) |
 | **Windows 11 Host** | `192.168.0.125` | Wi-Fi Host Adapter | VirtualBox Hypervisor host |
-| **CentOS Stream 9** | `192.168.0.117` | `08:00:27:f9:0e:2d` | **Target VM 2** (Installed, User: `radleecento`, SSH port 22 OPEN) |
+| **CentOS Stream 9** | `192.168.0.117` | `08:00:27:f9:0e:2d` | **Target VM 2** (Active, User: `radleecento`, passwordless SSH verified from Termux & Kali) |
 | **radblok API** | `https://radblok-api.onrender.com` | Public Cloud API | **LIVE** Express / MongoDB REST backend (`HTTP 200 OK`) |
 | **radblok Frontend** | `https://radblok.co.za` | Cloudflare CPT PoP | **LIVE & RESTORED** (`HTTP 200 OK`, Render origin) |
 
