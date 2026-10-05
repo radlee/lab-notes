@@ -2955,6 +2955,103 @@ td{font-variant-numeric:tabular-nums}
         ]
       }
     ]
+  },
+  {
+    "n": 25,
+    "date": "2026-10-05",
+    "module": "Reconnaissance & scanning",
+    "title": "Infrastructure OSINT: Reverse DNS (PTR), BGP Anycast Geolocation & RADB Route Registry (AS397273)",
+    "tags": [
+      "dns",
+      "recon",
+      "ptr",
+      "reverse-dns",
+      "bgp",
+      "asn",
+      "anycast",
+      "radb",
+      "radblok",
+      "whois",
+      "rpki"
+    ],
+    "summary": "Investigated network routing and edge infrastructure behind radblok.co.za following Udemy lecture 22. Performed reverse DNS resolution (PTR records under in-addr.arpa) discovering ip-216-24-57-1.ingress.render.com and AWS Route 53 zone authority. Audited ASN metadata via ipinfo.io revealing BGP Anycast deployment with San Francisco origin registration, and queried the Routing Assets Database (RADB) to map AS397273's announced prefixes (74.220.56.0/24 and 216.24.57.0/24) with RPKI validation status.",
+    "sections": [
+      {
+        "h": "Forward & Reverse DNS Resolution Mechanics (PTR & in-addr.arpa)",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Transitioning from domain OSINT into network reconnaissance, probed `radblok.co.za` using forward and reverse DNS lookups:"
+          },
+          {
+            "t": "code",
+            "label": "kali (nslookup)",
+            "text": "┌──(general㉿lee)-[~]\n└─$ nslookup radblok.co.za\nServer:\t\t192.168.0.1\nAddress:\t192.168.0.1#53\n\nNon-authoritative answer:\nName:\tradblok.co.za\nAddress: 216.24.57.1\n\n┌──(general㉿lee)-[~]\n└─$ nslookup 216.24.57.1\n1.57.24.216.in-addr.arpa\tname = ip-216-24-57-1.ingress.render.com.\n\nAuthoritative answers can be found from:\n57.24.216.in-addr.arpa\tnameserver = ns-1359.awsdns-41.org.\n57.24.216.in-addr.arpa\tnameserver = ns-1789.awsdns-31.co.uk.\n57.24.216.in-addr.arpa\tnameserver = ns-323.awsdns-40.com.\n57.24.216.in-addr.arpa\tnameserver = ns-662.awsdns-18.net."
+          },
+          {
+            "t": "p",
+            "text": "Notice the DNS mechanics: In IPv4, reverse lookups query the special `.in-addr.arpa` tree with octets reversed (`1.57.24.216`). The PTR record immediately unmasks the underlying PaaS ingress host (`ingress.render.com`) and reveals that Render's reverse zone is delegated to Amazon Route 53 nameservers (`awsdns`)."
+          }
+        ]
+      },
+      {
+        "h": "BGP Anycast & IP Geolocation Divergence (ipinfo.io)",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Queried IP intelligence for `216.24.57.1` to evaluate ASN registration and geographical presence:"
+          },
+          {
+            "t": "code",
+            "label": "kali (ipinfo.io)",
+            "text": "┌──(general㉿lee)-[~]\n└─$ curl ipinfo.io/216.24.57.1\n{\n  \"ip\": \"216.24.57.1\",\n  \"hostname\": \"ip-216-24-57-1.ingress.render.com\",\n  \"city\": \"San Francisco\",\n  \"region\": \"California\",\n  \"country\": \"US\",\n  \"loc\": \"37.7621,-122.3971\",\n  \"org\": \"AS397273 Render\",\n  \"postal\": \"94107\",\n  \"timezone\": \"America/Los_Angeles\",\n  \"readme\": \"https://ipinfo.io/missingauth\",\n  \"anycast\": true\n}"
+          },
+          {
+            "t": "table",
+            "head": [
+              "Attribute",
+              "Value",
+              "Technical & Reconnaissance Meaning"
+            ],
+            "rows": [
+              [
+                "`org`",
+                "`AS397273 Render`",
+                "Autonomous System Number (ASN) assigned to Render Services Inc. Provides the key identifier for BGP routing table mapping."
+              ],
+              [
+                "`anycast`",
+                "`true`",
+                "**BGP Anycast Routing**. Explains why geolocation indicates San Francisco, CA while physical latency is ~3ms in South Africa: multiple global edge locations announce this identical IP."
+              ],
+              [
+                "`hostname`",
+                "`ip-216-24-57-1.ingress.render.com`",
+                "Confirms this node acts as a shared multi-tenant ingress load balancer for Render custom domains."
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "h": "Routing Assets Database (RADB) & BGP Prefix Mapping",
+        "blocks": [
+          {
+            "t": "p",
+            "text": "Queried the Internet Routing Registry (IRR) via RADB (`whois.radb.net`) to enumerate all IP prefixes originated by AS397273:"
+          },
+          {
+            "t": "code",
+            "label": "kali (radb query)",
+            "text": "┌──(general㉿lee)-[~]\n└─$ whois -h whois.radb.net -- '-i origin AS397273'\nroute:          74.220.56.0/24\norigin:         AS397273\ndescr:          Proxy add for Render to re-advertise upstream\nmnt-by:         MAINT-AS14380\nchanged:        brad@opusinteractive.com 20260406\nsource:         RADB\nrpki-ov-state:  not_found\n\nroute:          216.24.57.0/24\norigin:         AS397273\ndescr:          655 5th St #19, San Francisco CA 94107\nmnt-by:         MNT-RS-1125\nsource:         ARIN\nrpki-ov-state:  valid\n\nroute:          216.24.57.0/24\ndescr:          RPKI ROA for 216.24.57.0/24 / AS397273\nmax-length:     24\norigin:         AS397273\nsource:         RPKI"
+          },
+          {
+            "t": "p",
+            "text": "1. **Prefix Discovery**: Render announces two primary /24 CIDR blocks: `74.220.56.0/24` (upstream transit via Opus Interactive) and `216.24.57.0/24` (direct ARIN assignment).\n2. **RPKI Validation (`valid`)**: `216.24.57.0/24` has a cryptographically signed Route Origin Authorization (ROA), protecting against BGP prefix hijacking attacks."
+          }
+        ]
+      }
+    ]
   }
 ];
   (async () => {

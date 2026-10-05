@@ -1,10 +1,11 @@
 # Lab Session State & Checkpoint
 
-**Last Updated**: October 4, 2026, 12:15 SAST  
+**Last Updated**: October 5, 2026, 17:15 SAST  
 **Author / Lab User**: `general@lee` (Kali Linux) / `radlee`  
+**Course Tracking**: Udemy Ethical Hacking / Kali Linux (`lecture/13750450`)  
 **GitHub Repository**: [`https://github.com/radlee/lab-notes.git`](https://github.com/radlee/lab-notes.git)  
 **Live Interactive Dashboard**: [`https://radlee.github.io/lab-notes/`](https://radlee.github.io/lab-notes/)  
-**Current Phase**: Multi-Target Lab Operational & Public Threat Intel Dashboard Live
+**Current Phase**: Active Reconnaissance & Network Mapping (DNS, BGP, Port Discovery)
 
 ---
 
@@ -127,6 +128,7 @@ python -c 'import pty; pty.spawn("/bin/bash")'
 - **Entry 022**: Supply Chain Backdoor: vsftpd 2.3.4 (CVE-2011-2523), smiley trigger `:)`, port 6200 listener, raw sockets vs interactive PTY.
 - **Entry 023**: Layer 2 & 3 Host Verification: ARP resolution, VirtualBox OUI (`08:00:27`), and cross-host routing proof.
 - **Entry 024**: Frontend Reactivation & Full-Stack Surface Analysis: radblok.co.za Live Audit (Route mapping, cookie security, missing defensive headers).
+- **Entry 025**: Infrastructure OSINT: Reverse DNS (PTR), BGP Anycast Geolocation & RADB Route Registry (AS397273).
 
 ---
 
