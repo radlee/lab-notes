@@ -1,6 +1,6 @@
 # Lab Session State & Checkpoint
 
-**Last Updated**: October 5, 2026, 17:15 SAST  
+**Last Updated**: November 7, 2026, 09:05 SAST  
 **Author / Lab User**: `general@lee` (Kali Linux) / `radlee`  
 **Course Tracking**: Udemy Ethical Hacking / Kali Linux (`lecture/13750450`)  
 **GitHub Repository**: [`https://github.com/radlee/lab-notes.git`](https://github.com/radlee/lab-notes.git)  
@@ -30,6 +30,7 @@ Because the VMs are bridged directly to your home Wi-Fi network, your Android de
 | **Metasploitable 2** | `192.168.0.155` | `08:00:27:1d:80:01` | **Vulnerable Linux Target** (Active, Bridged, Running) |
 | **Kali Linux** | `192.168.0.149` | `eth0` | **Attack Box** (Active, SSH port 22 open, passwordless Ed25519 key auth verified) |
 | **Windows 11 Host** | `192.168.0.125` / `100.71.22.36` | `e8:fb:1c:db:da:1b` | **Hypervisor Host** (Active, User: `Lee337`, Tailscale Mesh Online, Subnet Router advertised) |
+| **USB Mini-NAS (SanDisk)** | `\\192.168.0.125\SanDisk` / `\\100.71.22.36\SanDisk` | Disk 1 (`D:\`) | **Active SMB Share** (28.65 GB exFAT, shared via Windows host for cross-lab data transfer) |
 | **CentOS Stream 9** | `192.168.0.117` | `08:00:27:f9:0e:2d` | **Target VM 2** (Active, User: `radleecento`, passwordless SSH verified from Termux & Kali) |
 | **radblok API** | `https://radblok-api.onrender.com` | Public Cloud API | **LIVE** Express / MongoDB REST backend (`HTTP 200 OK`) |
 | **radblok Frontend** | `https://radblok.co.za` | Cloudflare CPT PoP | **LIVE & RESTORED** (`HTTP 200 OK`, Render origin) |
@@ -109,6 +110,10 @@ python -c 'import pty; pty.spawn("/bin/bash")'
    - Pointing Device: `usbtablet` (prevents mouse lock/traps).
    - AutoCapture: `GUI/Input/AutoCapture` set to `false`.
    - Message Dialogs: Suppressed (`confirmInputCapture`, `remindAboutAutoCapture`, `remindAboutMouseIntegrationOff`, `remindAboutKeyboardAuxiliary`).
+3. **Attached Lab Storage & Shared Network Volumes**:
+   - **Disk 1**: SanDisk 3.2Gen1 32GB (repartitioned MBR, formatted exFAT, mounted at `D:\`, full 28.65 GB reclaimed).
+   - **Network Share**: Windows SMB share active as `\\192.168.0.125\SanDisk` (and Tailscale `\\100.71.22.36\SanDisk`). `LanmanServer` active, firewall rules enabled for File and Printer Sharing, full read/write access configured for lab nodes.
+   - **Future Hardware Project**: Build a dedicated Live Encrypted OS with Persistence (Kali Linux or Tails with LUKS encrypted persistence partition) on a new, separate USB drive once acquired.
 
 ---
 
@@ -137,6 +142,8 @@ python -c 'import pty; pty.spawn("/bin/bash")'
 - [x] Verify SSH on Kali Linux (`ssh general@192.168.0.149` - passwordless Ed25519 key auth active).
 - [x] Verify SSH on Windows 11 Host (`192.168.0.125` - OpenSSH Server active on Any profile).
 - [x] Complete CentOS Stream 9 Anaconda installation (Booted into GNOME, IP: `192.168.0.117`, passwordless SSH verified).
+- [x] Configure 32GB SanDisk USB 3.2 as exFAT network share (`\\192.168.0.125\SanDisk`) for cross-lab storage.
+- [ ] Project (New USB): Setup Live Encrypted OS with Persistence (Kali Linux / Tails LUKS encrypted partition) for mobile penetration testing.
 - [ ] Conduct comprehensive service scan against CentOS Stream 9 (`192.168.0.117`) from Kali.
 - [ ] Test API authenticated routes on `radblok-api.onrender.com` (POST / login / JWT tokens).
 - [ ] Test admin authentication & CSRF behavior on `https://radblok.co.za/admin`.
